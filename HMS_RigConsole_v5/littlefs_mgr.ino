@@ -3,7 +3,7 @@
 //
 //  Uses ESP32 FFat (FAT over flash) with the predefined partition scheme:
 //    Arduino IDE → Tools → Partition Scheme → "16M Flash (2MB APP/12.5MB FATFS)"
-//  No custom partitions.csv needed.
+//  No custom partitions.csv — one in the sketch folder overrides the IDE scheme.
 //
 //  Routes registered in web_server.ino::startWebServer():
 //    GET  /api/files      — JSON list of files [{name, size}, …]
