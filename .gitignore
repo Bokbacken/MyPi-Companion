@@ -1,0 +1,22 @@
+# Build artifacts / archives
+*.zip
+*.bin
+*.elf
+*.map
+build/
+
+# Backups and editor files
+*.bak
+*~
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Auto-generated document conversions
+*.pdf
+*.docx
+
+# Python
+__pycache__/
+*.pyc
