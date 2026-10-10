@@ -301,6 +301,7 @@ commit both. The script asserts: no FitAddon, `termFit` present, vertical QB pre
 - [x] Version strings updated to v5
 - [x] Removed `partitions.csv` (it overrode the FATFS scheme)
 - [x] Fixed web OTA: page sent a raw body, server handler expects multipart
-- [x] GitHub Actions build (`.github/workflows/build.yml`) — compiles cleanly
+- [x] Compiles cleanly with arduino-cli (core 3.3.12, GFX 1.6.9, WebSockets 2.7.2)
+- [ ] Add `.github/workflows/build.yml` via GitHub web UI (the Abacus app lacks `workflows` permission)
 - [ ] First flash via USB (new partition table), then test OTA and FFat on hardware
 - [ ] Verify submenu handling in `macros_html.h` (`mkEntry()`)
