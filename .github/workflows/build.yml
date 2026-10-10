@@ -1,0 +1,60 @@
+# Compiles the firmware on every push / pull request and publishes the
+# binaries as a downloadable artifact (Actions -> run -> Artifacts).
+#
+# Settings mirror Arduino IDE -> Tools:
+#   Board ESP32S3 Dev Module, USB Mode USB-OTG (TinyUSB), USB CDC On Boot Enabled,
+#   PSRAM OPI PSRAM, Flash Size 16MB, Partition "16M Flash (2MB APP/12.5MB FATFS)"
+name: Build firmware
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  SKETCH: HMS_RigConsole_v5
+  FQBN: esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=cdc,PSRAM=opi,FlashSize=16M,PartitionScheme=fatflash
+  ESP32_CORE_VERSION: "3.3.12"
+  ESP32_INDEX_URL: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: arduino/setup-arduino-cli@v2
+
+      - name: Cache Arduino core and libraries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.arduino15
+            ~/Arduino/libraries
+          key: arduino-esp32-${{ env.ESP32_CORE_VERSION }}-gfx1.6.9-ws2.7.2
+
+      - name: Install ESP32 core and libraries
+        run: |
+          arduino-cli core update-index --additional-urls "$ESP32_INDEX_URL"
+          arduino-cli core install "esp32:esp32@${ESP32_CORE_VERSION}" --additional-urls "$ESP32_INDEX_URL"
+          arduino-cli lib install "GFX Library for Arduino@1.6.9" "WebSockets@2.7.2"
+
+      - name: Verify terminal_html.h is up to date
+        run: |
+          cd "$SKETCH"
+          python3 gen_terminal_html.py
+          git diff --exit-code -- terminal_html.h || { echo "::error::terminal_html.h is stale - run gen_terminal_html.py and commit"; exit 1; }
+
+      - name: Compile
+        run: |
+          arduino-cli compile -b "$FQBN" --warnings default \
+            --build-path build --output-dir out "$SKETCH"
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ github.sha }}
+          path: |
+            out/${{ env.SKETCH }}.ino.bin
+            out/${{ env.SKETCH }}.ino.merged.bin
+          if-no-files-found: error
