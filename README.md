@@ -62,8 +62,7 @@ Tools menu:
 ## Automatic build (GitHub Actions)
 
 Every push and pull request is compiled by `.github/workflows/build.yml` with the
-settings above (the workflow file must be added by the repo owner via the GitHub
-web UI — the Abacus GitHub App is not allowed to write workflow files). To download the firmware: **Actions** → latest *Build firmware* run →
+settings above. To download the firmware: **Actions** → latest *Build firmware* run →
 **Artifacts** → `firmware-<sha>` (zip containing the `.bin` files).
 The build also fails if `terminal_html.h` is out of date with `gen_terminal_html.py`.
 
