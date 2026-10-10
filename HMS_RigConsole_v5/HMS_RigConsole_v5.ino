@@ -1,5 +1,5 @@
 // ============================================================
-//  HMS Rig Console — Firmware v4
+//  HMS Rig Console — Firmware v5
 //  Waveshare ESP32-S3-Touch-LCD-1.47
 //  Portrait 172×320 | JD9853 (via Arduino_GFX) | AXS5106L touch
 // ============================================================
@@ -17,7 +17,7 @@
 //    config.h              — pins, geometry, colours, structs, enum
 //    jd9853_init.h         — JD9853-specific register init
 //    touch_axs5106l.h      — AXS5106L I2C touch driver (header-only)
-//    HMS_RigConsole_v4.ino — includes, globals, setup, loop, splash
+//    HMS_RigConsole_v5.ino — includes, globals, setup, loop, splash
 //    display.ino           — all draw*() functions  (Arduino_GFX)
 //    touch.ino             — handleTouch, dispatchAction, pollWifiScan
 //    protocol.ino          — handleSerial, processMsg, wsEvent
@@ -225,7 +225,7 @@ void drawProgmemImageTransp(int16_t x, int16_t y, int16_t w, int16_t h,
 //
 //  Layout (white background, portrait 172×320):
 //    Upper half (y 0..159)  — HMS logo + "HMS Networks"
-//    Lower half (y 160..319)— Anybus logo + "Rig Console v4"
+//    Lower half (y 160..319)— Anybus logo + "Rig Console v5"
 //
 //  Sequence:
 //    1. Start async Wi-Fi scan (non-blocking) immediately.
@@ -264,7 +264,7 @@ static void _splashBottom() {
   int y2 = 160 + (160 - ANYBUS_LOGO_SPLASH_H) / 2;
   drawProgmemImageTransp(x2, y2, ANYBUS_LOGO_SPLASH_W, ANYBUS_LOGO_SPLASH_H, anybus_logo_splash, 0x0000);
 
-  const char *lbl = "Rig Console  v4";
+  const char *lbl = "Rig Console  v5";
   gfx->setTextSize(1);
   gfx->setTextColor(COL_SPLASH_TXT, COL_SPLASH_BG);
   int16_t bx, by; uint16_t tw, th;

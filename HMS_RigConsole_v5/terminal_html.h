@@ -121,7 +121,7 @@ static const char TERMINAL_HTML[] PROGMEM =
   "      <div class=\"dd-item\" onclick=\"fontInc()\">A&#8314; Font +</div>\n"
   "      <div class=\"dd-item\" onclick=\"fontDec()\">A&#8315; Font &minus;</div>\n"
   "      <div class=\"dd-sep\"></div>\n"
-  "      <div class=\"dd-item\" onclick=\"openEditor()\">&#9998; Edit macros &amp; menus&hellip;</div>\n"
+  "      <div class=\"dd-item\" onclick=\"window.open('/macros','_blank')\">&#9998; Edit macros &amp; menus&hellip;</div>\n"
   "      <div class=\"dd-sep\"></div>\n"
   "      <div class=\"dd-item\" onclick=\"doClear()\">&#10006; Clear</div>\n"
   "      <div class=\"dd-item\" onclick=\"doReconnect()\">&#8635; Reconnect</div>\n"

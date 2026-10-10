@@ -1,6 +1,6 @@
 #pragma once
 // ============================================================
-//  HMS Rig Console — Hardware / Layout Configuration  (v4)
+//  HMS Rig Console — Hardware / Layout Configuration  (v5)
 //  Target: Waveshare ESP32-S3-Touch-LCD-1.47
 //          JD9853 display  172×320 portrait
 //          AXS5106L capacitive touch  (I2C, addr 0x63)

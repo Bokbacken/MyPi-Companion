@@ -128,7 +128,7 @@ html,body{width:100%;height:100%;background:#111;color:#ccc;font-family:sans-ser
       <div class="dd-item" onclick="fontInc()">A&#8314; Font +</div>
       <div class="dd-item" onclick="fontDec()">A&#8315; Font &minus;</div>
       <div class="dd-sep"></div>
-      <div class="dd-item" onclick="openEditor()">&#9998; Edit macros &amp; menus&hellip;</div>
+      <div class="dd-item" onclick="window.open('/macros','_blank')">&#9998; Edit macros &amp; menus&hellip;</div>
       <div class="dd-sep"></div>
       <div class="dd-item" onclick="doClear()">&#10006; Clear</div>
       <div class="dd-item" onclick="doReconnect()">&#8635; Reconnect</div>

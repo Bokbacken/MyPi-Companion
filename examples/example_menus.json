@@ -1,0 +1,113 @@
+{
+  "menus": [
+    {
+      "id": 1,
+      "label": "Network",
+      "entries": [
+        {"type": "macro", "ref": 1},
+        {"type": "macro", "ref": 2},
+        {"type": "macro", "ref": 3},
+        {"type": "macro", "ref": 7},
+        {"type": "macro", "ref": 6},
+        {"type": "sep"},
+        {"type": "macro", "ref": 4},
+        {"type": "macro", "ref": 5},
+        {"type": "macro", "ref": 8},
+        {"type": "sep"},
+        {"type": "submenu", "label": "WiFi", "entries": [
+          {"type": "macro", "ref":  9},
+          {"type": "macro", "ref": 10},
+          {"type": "macro", "ref": 11},
+          {"type": "macro", "ref": 12},
+          {"type": "macro", "ref": 13}
+        ]},
+        {"type": "submenu", "label": "Change IP [templates]", "entries": [
+          {"type": "macro", "ref": 41},
+          {"type": "macro", "ref": 42},
+          {"type": "macro", "ref": 43},
+          {"type": "sep"},
+          {"type": "macro", "ref": 46},
+          {"type": "macro", "ref": 47},
+          {"type": "sep"},
+          {"type": "macro", "ref": 44},
+          {"type": "macro", "ref": 45}
+        ]}
+      ]
+    },
+    {
+      "id": 2,
+      "label": "Processes",
+      "entries": [
+        {"type": "macro", "ref": 14},
+        {"type": "macro", "ref": 15},
+        {"type": "macro", "ref": 16},
+        {"type": "sep"},
+        {"type": "macro", "ref": 17},
+        {"type": "macro", "ref": 18},
+        {"type": "sep"},
+        {"type": "macro", "ref": 19},
+        {"type": "macro", "ref": 20},
+        {"type": "macro", "ref": 21}
+      ]
+    },
+    {
+      "id": 3,
+      "label": "System",
+      "entries": [
+        {"type": "macro", "ref": 22},
+        {"type": "macro", "ref": 23},
+        {"type": "macro", "ref": 24},
+        {"type": "macro", "ref": 25},
+        {"type": "macro", "ref": 26},
+        {"type": "sep"},
+        {"type": "macro", "ref": 27},
+        {"type": "macro", "ref": 28},
+        {"type": "sep"},
+        {"type": "macro", "ref": 29},
+        {"type": "macro", "ref": 30},
+        {"type": "sep"},
+        {"type": "submenu", "label": "Services [templates]", "entries": [
+          {"type": "macro", "ref": 50},
+          {"type": "macro", "ref": 51},
+          {"type": "macro", "ref": 52}
+        ]},
+        {"type": "sep"},
+        {"type": "macro", "ref": 48},
+        {"type": "macro", "ref": 49}
+      ]
+    },
+    {
+      "id": 4,
+      "label": "USB & Hardware",
+      "entries": [
+        {"type": "macro", "ref": 31},
+        {"type": "macro", "ref": 32},
+        {"type": "macro", "ref": 33},
+        {"type": "sep"},
+        {"type": "macro", "ref": 34},
+        {"type": "macro", "ref": 35},
+        {"type": "macro", "ref": 36},
+        {"type": "sep"},
+        {"type": "macro", "ref": 57},
+        {"type": "macro", "ref": 58}
+      ]
+    },
+    {
+      "id": 5,
+      "label": "Packages & Dev",
+      "entries": [
+        {"type": "macro", "ref": 37},
+        {"type": "macro", "ref": 38},
+        {"type": "macro", "ref": 39},
+        {"type": "macro", "ref": 40},
+        {"type": "sep"},
+        {"type": "macro", "ref": 55},
+        {"type": "macro", "ref": 56},
+        {"type": "sep"},
+        {"type": "macro", "ref": 53},
+        {"type": "macro", "ref": 54}
+      ]
+    }
+  ],
+  "nextId": 6
+}

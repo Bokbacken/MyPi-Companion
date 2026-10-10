@@ -24,6 +24,7 @@
 //    POST /api/nvsdel         — delete NVS slot
 //    POST /api/nvsconnect     — tell Pi to connect NVS slot
 //    GET  /terminal           — xterm.js terminal page
+//    GET  /macros             — GUI macro & menu editor
 //    GET  /update             — OTA firmware upload page
 //    POST /update             — receive + flash firmware binary
 //    GET  /api/files          — LittleFS file list (JSON)
@@ -34,6 +35,7 @@
 
 #include "hms_logo_web.h"   // HMS_LOGO_WEB_PNG / HMS_LOGO_WEB_PNG_LEN
 #include "page_html.h"   // PAGE_TMPL, NETWORKS_HTML, INSTALLPI_HTML, SYSINFO_HTML, OTA_HTML
+#include "macros_html.h" // MACROS_HTML — GUI macro/menu editor at /macros
 
 
 // ============================================================
@@ -376,6 +378,11 @@ void startWebServer() {
     server.sendHeader("Cache-Control", "max-age=86400");
     server.send_P(200, "text/css",
                   (const char *)XTERM_CSS_GZ, XTERM_CSS_GZ_LEN);
+  });
+
+  // ── Macro / Menu GUI editor ────────────────────────────────
+  server.on("/macros", HTTP_GET, []() {
+    server.send_P(200, "text/html", MACROS_HTML);
   });
 
   // ── OTA ────────────────────────────────────────────────────
