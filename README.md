@@ -17,6 +17,10 @@ MyPi-Companion/
 │   ├── gen_terminal_html.py  generator for terminal_html.h
 │   └── ...
 ├── examples/                 example macros & menus (importable via /macros)
+├── docs/                     project documentation
+│   ├── PROJECT_STATUS.md     architecture, protocol, routes, constraints
+│   ├── GUIDELINES.md         working rules and hard technical constraints
+│   └── ROADMAP.md            done / next / long-term
 └── README.md
 ```
 
@@ -63,4 +67,5 @@ See [`examples/README.md`](examples/README.md) — 58 Raspberry Pi macros in 5 m
 ## Version history
 
 - **v5** — GUI macro/menu editor at `/macros`; terminal menu links to it
-- **v4** — baseline import
+- **v4** — baseline import, locked. Available as git tag `v4`
+  (GitHub → Tags → `v4` → download ZIP, or `git checkout v4`).
