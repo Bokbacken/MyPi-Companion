@@ -411,8 +411,12 @@ document.getElementById('upf').onsubmit=function(e){
     r.style.display='block';r.className='result err';
     r.textContent='Connection lost during upload.';
   };
+  // Must be multipart: the server's upload handler only receives
+  // multipart/form-data (a raw body is routed to the raw handler instead).
+  var fd=new FormData();
+  fd.append('firmware',f,f.name);
   xhr.open('POST','/update');
-  xhr.send(f);
+  xhr.send(fd);
 };
 </script></body></html>)html";
 

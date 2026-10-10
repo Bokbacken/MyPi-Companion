@@ -271,21 +271,30 @@ void handleOtaUpload() {
   } else if (upload.status == UPLOAD_FILE_END) {
     if (Update.end(true)) {
       drawOtaScreen(101);
-      server.send(200, "text/plain", "OK");
-      delay(1200);
-      ESP.restart();
     } else {
       char errBuf[40];
       snprintf(errBuf, sizeof(errBuf), "End failed: %s",
                Update.errorString());
       drawOtaError(errBuf);
-      server.send(500, "text/plain", errBuf);
     }
 
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
     Update.abort();
     drawOtaError("Aborted");
-    server.send(400, "text/plain", "Aborted");
+  }
+}
+
+// Runs after the whole request has been received — always sends exactly
+// one response, so the browser never hangs (e.g. when Update.begin failed).
+void handleOtaDone() {
+  if (Update.isFinished() && !Update.hasError()) {
+    server.send(200, "text/plain", "OK");
+    delay(1200);
+    ESP.restart();
+  } else {
+    String err = Update.hasError() ? String(Update.errorString())
+                                   : String("No firmware received");
+    server.send(500, "text/plain", err);
   }
 }
 
@@ -388,7 +397,7 @@ void startWebServer() {
   // ── OTA ────────────────────────────────────────────────────
   server.on("/update", HTTP_GET,  handleOtaPage);
   server.on("/update", HTTP_POST,
-    []() { /* Response sent inside handleOtaUpload after End */ },
+    handleOtaDone,
     handleOtaUpload
   );
 

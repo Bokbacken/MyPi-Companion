@@ -69,8 +69,11 @@ hms_logo_splash.h      — 110×64 HMS logo, RGB565 (black = transparent)
 anybus_logo_splash.h   — 130×26 Anybus logo, RGB565 (black = transparent)
 hms_logo_corner.h      — 32×19 status-bar logo
 hms_logo_web.h         — PNG logo for the web banner
-partitions.csv         — custom table (NOT active — IDE scheme is used)
 ```
+
+> There must be **no `partitions.csv`** in the sketch folder: the ESP32 core (3.x)
+> copies it into the build and it overrides the IDE partition scheme. The old file
+> (LittleFS era) had no `fat` partition, so `FFat.begin()` could not mount. Removed in v5.
 
 Pi side (not yet in this repo): `rig_daemon.py` (systemd service, never modified by
 this project), `install.sh`, offline `pyserial` wheel.
@@ -244,7 +247,8 @@ commit both. The script asserts: no FitAddon, `termFit` present, vertical QB pre
 ## FFat storage
 
 - Arduino IDE → Tools → Partition Scheme → **"16M Flash (2MB APP/12.5MB FATFS)"**
-- No custom `partitions.csv` needed
+- No custom `partitions.csv` — and none may exist in the sketch folder (it would override the scheme)
+- Changing the partition table requires a **USB flash** from Arduino IDE — OTA only replaces the app
 - Mounted in `littlefs_mgr.ino` (FFat, despite the file name)
 
 ## USB composite device
@@ -274,6 +278,13 @@ commit both. The script asserts: no FitAddon, `termFit` present, vertical QB pre
 | QB panel shown as 5×5 grid | CSS change | Restored vertical list |
 | Macros caused "Incorrect padding" | Raw text sent instead of base64 | `btoa(payload)` everywhere |
 
+## Bugs fixed (v5)
+
+| Bug | Root cause | Fix |
+|---|---|---|
+| Web OTA upload failed | `/update` page sent the file as a raw body (`xhr.send(file)`); `handleOtaUpload()` reads `server.upload()`, which is only valid for multipart. With a raw body core 3.x routes the request to the raw path and `server.upload()` is invalid | Page sends `FormData`; response moved to `handleOtaDone()` so exactly one reply is always sent |
+| FFat likely never mounted | `partitions.csv` in the sketch folder overrode the IDE scheme; it had no `fat` partition | File removed |
+
 ---
 
 ## Known constraints
@@ -288,5 +299,8 @@ commit both. The script asserts: no FitAddon, `termFit` present, vertical QB pre
 - [x] GUI macro/menu/QB editor at `/macros`
 - [x] Terminal menu links to `/macros`
 - [x] Version strings updated to v5
-- [ ] Compiled and tested on hardware
+- [x] Removed `partitions.csv` (it overrode the FATFS scheme)
+- [x] Fixed web OTA: page sent a raw body, server handler expects multipart
+- [x] GitHub Actions build (`.github/workflows/build.yml`) — compiles cleanly
+- [ ] First flash via USB (new partition table), then test OTA and FFat on hardware
 - [ ] Verify submenu handling in `macros_html.h` (`mkEntry()`)
