@@ -97,6 +97,9 @@ char  activeIP[24]                = "---";
 bool  piConnected                 = false;
 char  lastErrMsg[64]              = "";
 bool  hasError                    = false;
+char  infoMsg[64]                 = "";     // transient status (status bar line 3)
+bool  hasInfo                     = false;
+unsigned long infoExpireMs        = 0;      // millis() when infoMsg is cleared
 
 // -----------------------------------------------------------
 //  Menu indices
@@ -410,6 +413,13 @@ void loop() {
   if (piConnected && lastStatusMs > 0 &&
       (now - lastStatusMs) > PI_TIMEOUT_MS) {
     piConnected = false;
+    drawStatusBar();
+    gfx->flush();
+  }
+
+  // Expire transient info message (e.g. "Tillagd: <ssid>") → back to Pi IP
+  if (hasInfo && (long)(now - infoExpireMs) >= 0) {
+    hasInfo = false;
     drawStatusBar();
     gfx->flush();
   }
