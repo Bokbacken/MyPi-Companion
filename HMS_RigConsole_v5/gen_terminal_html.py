@@ -249,26 +249,87 @@ function initTerm() {
     fontSize,
     fontFamily: 'Menlo,Monaco,"Courier New",monospace',
     theme: { background: '#0d0d0d', foreground: '#cccccc', cursor: '#aaaaaa' },
-    scrollback: 5000,
+    scrollback: 10000,
     cursorBlink: true
   });
   term.open(document.getElementById('term'));
   requestAnimationFrame(() => { termFit(); term.focus(); });
-  term.onData(d => {
-    if (!ws || ws.readyState !== 1) return;
-    try { ws.send(btoa(d)); }
-    catch (_) {
-      const b = new TextEncoder().encode(d);
-      let s = ''; b.forEach(x => s += String.fromCharCode(x));
-      ws.send(btoa(s));
+  // Ctrl+Up / Ctrl+Down: browse local command history
+  term.attachCustomKeyEventHandler(ev => {
+    if (ev.type === 'keydown' && ev.ctrlKey && !ev.altKey && !ev.shiftKey &&
+        (ev.key === 'ArrowUp' || ev.key === 'ArrowDown')) {
+      ev.preventDefault();
+      histNav(ev.key === 'ArrowUp' ? -1 : 1);
+      return false;
     }
+    return true;
   });
+  term.onData(d => { histTrack(d); wsSendText(d); });
   term.onLineFeed(() => { sessionLog += '\n'; });
   new ResizeObserver(() => {
     termFit();
     if (ws && ws.readyState === 1)
       ws.send('CTL:RESIZE:' + term.cols + ':' + term.rows);
   }).observe(document.getElementById('termwrap'));
+}
+
+// ================================================================
+//  Command history (Ctrl+Up / Ctrl+Down, last 100 commands)
+// ================================================================
+const HIST_MAX = 100;
+let cmdHist = [];
+try { cmdHist = JSON.parse(localStorage.getItem('cmdHist') || '[]'); } catch (_) { cmdHist = []; }
+if (!Array.isArray(cmdHist)) cmdHist = [];
+let histIdx  = cmdHist.length;   // == length -> editing a new line
+let histDraft = '';
+let lineBuf  = '';               // current input line as typed (null = unknown)
+
+function wsSendText(d) {
+  if (!ws || ws.readyState !== 1) return;
+  try { ws.send(btoa(d)); }
+  catch (_) {
+    const b = new TextEncoder().encode(d);
+    let s = ''; b.forEach(x => s += String.fromCharCode(x));
+    ws.send(btoa(s));
+  }
+}
+
+function histPush(cmd) {
+  if (!cmd || !cmd.trim()) return;
+  if (cmdHist[cmdHist.length - 1] !== cmd) cmdHist.push(cmd);
+  if (cmdHist.length > HIST_MAX) cmdHist = cmdHist.slice(-HIST_MAX);
+  try { localStorage.setItem('cmdHist', JSON.stringify(cmdHist)); } catch (_) {}
+}
+
+// Follow what the user types so Enter can record the command line.
+function histTrack(d) {
+  if (d.length > 1 && d.charCodeAt(0) === 27) { lineBuf = null; return; }  // escape seq (arrows etc.)
+  for (const ch of d) {
+    const c = ch.charCodeAt(0);
+    if (ch === '\r' || ch === '\n') {
+      if (lineBuf !== null) histPush(lineBuf);
+      lineBuf = ''; histIdx = cmdHist.length; histDraft = '';
+    } else if (c === 127 || c === 8) {
+      if (lineBuf !== null) lineBuf = lineBuf.slice(0, -1);
+    } else if (c === 3 || c === 21) {          // Ctrl+C / Ctrl+U
+      lineBuf = ''; histIdx = cmdHist.length;
+    } else if (c === 9 || c === 27 || c < 32) { // Tab completion / other control -> unknown
+      lineBuf = null;
+    } else if (lineBuf !== null) {
+      lineBuf += ch;
+    }
+  }
+}
+
+function histNav(dir) {
+  if (!cmdHist.length) return;
+  if (histIdx === cmdHist.length && dir < 0) histDraft = lineBuf || '';
+  const ni = Math.max(0, Math.min(cmdHist.length, histIdx + dir));
+  if (ni === histIdx) return;
+  histIdx = ni;
+  const txt = histIdx === cmdHist.length ? histDraft : cmdHist[histIdx];
+  wsSendText('\x15' + txt);  // Ctrl+U clears the shell's line, then type the entry
+  lineBuf = txt;
 }
 
 // ================================================================
