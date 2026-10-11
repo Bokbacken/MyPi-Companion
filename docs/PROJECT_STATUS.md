@@ -283,6 +283,7 @@ commit both. The script asserts: no FitAddon, `termFit` present, vertical QB pre
 | Bug | Root cause | Fix |
 |---|---|---|
 | Web OTA upload failed | `/update` page sent the file as a raw body (`xhr.send(file)`); `handleOtaUpload()` reads `server.upload()`, which is only valid for multipart. With a raw body core 3.x routes the request to the raw path and `server.upload()` is invalid | Page sends `FormData`; response moved to `handleOtaDone()` so exactly one reply is always sent |
+| Install on Pi typed garbage (`/` → `-`, `;` → `ö`) | HID sends key positions, not characters; the Pi applies its own layout (US codes on a Swedish Pi) | Layout auto-detection: the RIGSETUP probe is typed with en_US, sv_SE, de_DE, fr_FR, es_ES in turn (Ctrl+C before each); the one that answers over CDC is used for the rest. Wrong-layout probes were checked to be harmless syntax errors |
 | FFat likely never mounted | `partitions.csv` in the sketch folder overrode the IDE scheme; it had no `fat` partition | File removed |
 
 ---
