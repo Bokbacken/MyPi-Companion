@@ -27,10 +27,16 @@
 //
 //  Arduino IDE settings:
 //    Board       : ESP32S3 Dev Module
+//    USB Mode    : USB-OTG (TinyUSB)   ← REQUIRED (not "Hardware CDC")
 //    USB CDC     : Enabled
 //    PSRAM       : OPI PSRAM
 //    Flash size  : 16 MB  (or 8 MB)
 //    Upload speed: 921600
+//
+//  Note: "USB-OTG (TinyUSB)" maps to USBMode=default in the FQBN.
+//  This gives a composite CDC serial + HID keyboard + MSC device.
+//  With "Hardware CDC and JTAG" (USBMode=hwcdc), HID and MSC do not
+//  work and the serial port only appears in bootloader mode.
 // ============================================================
 
 #include "config.h"
