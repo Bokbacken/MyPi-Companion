@@ -91,7 +91,8 @@ int              termWsClient = -1;
 // -----------------------------------------------------------
 char  dynProfiles[MAX_WIFI_PROFILES][MAX_PROFILE_LEN];
 int   numDynProfiles  = 0;
-char  activeSSID[MAX_PROFILE_LEN] = "---";
+char  activeSSID[MAX_PROFILE_LEN] = "---";  // actual Wi-Fi SSID  (for display)
+char  activeConn[MAX_PROFILE_LEN] = "---";  // NM connection name (for CMD:CONNECT)
 char  activeIP[24]                = "---";
 bool  piConnected                 = false;
 char  lastErrMsg[64]              = "";

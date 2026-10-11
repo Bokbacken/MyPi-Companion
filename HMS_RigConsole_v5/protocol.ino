@@ -57,13 +57,19 @@ void processMsg(const String& msg) {
   // PONG — legacy keepalive reply (ignored; polling replaces PING)
   if (msg == "PONG") return;
 
-  // STATUS:SSID:<ssid>
+  // STATUS:SSID:<ssid>  — actual Wi-Fi SSID for display
   if (msg.startsWith("STATUS:SSID:")) {
     strlcpy(activeSSID, msg.substring(12).c_str(), MAX_PROFILE_LEN);
     lastStatusMs = millis();
     if (!piConnected) { piConnected = true; }
     drawStatusBar();
     gfx->flush();
+    return;
+  }
+
+  // STATUS:CONN:<name>  — NetworkManager connection name used for CMD:CONNECT
+  if (msg.startsWith("STATUS:CONN:")) {
+    strlcpy(activeConn, msg.substring(12).c_str(), MAX_PROFILE_LEN);
     return;
   }
 

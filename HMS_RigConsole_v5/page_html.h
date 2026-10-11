@@ -39,6 +39,7 @@ footer{text-align:center;padding:12px;font-size:11px;color:#484f58}
 <div class="card">
 <div class="lbl">Pi network</div>
 <div class="val" id="cur-ssid">---</div>
+<div class="ip" id="cur-conn"></div>
 <div class="ip"  id="cur-ip">---</div>
 <div class="div">
 <div class="lbl">ESP network</div>
@@ -59,6 +60,7 @@ footer{text-align:center;padding:12px;font-size:11px;color:#484f58}
 function poll(){
   fetch('/status').then(r=>r.json()).then(function(d){
     document.getElementById('cur-ssid').textContent=d.ssid||'---';
+    document.getElementById('cur-conn').textContent=d.conn&&d.conn!=='---'?'('+d.conn+')':'';
     document.getElementById('cur-ip').textContent=d.ip||'---';
     document.getElementById('esp-ssid').textContent=d.espssid||'---';
     document.getElementById('esp-ip').textContent=d.espip||'---';
@@ -128,13 +130,13 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 <div class="msg" id="msg"></div>
 <footer><a href="/" style="color:#484f58">HMS Rig Console</a></footer>
 <script>
-var polling=true,curSsid='';
+var polling=true,curSsid='',curConn='';
 function showMsg(t,e){var m=document.getElementById('msg');m.textContent=t;m.className='msg'+(e?' err':'');m.style.display='block';}
 function hideMsg(){document.getElementById('msg').style.display='none';}
 function buildList(profiles){
   var h='';
   profiles.forEach(function(p){
-    var active=(p.ssid===curSsid);
+    var active=(p.ssid===curConn);  // p.ssid is the NM connection name; compare with curConn
     h+='<div class="row"><span><span class="dot '+(active?'on':'off')+'"></span><span class="name">'+p.ssid+'</span></span>';
     if(active)h+='<button class="btn ba">Active</button>';
     else h+='<button class="btn bc" onclick="conn(\''+p.ssid+'\')">Connect</button>';
@@ -147,6 +149,7 @@ function poll(){
   if(!polling)return;
   fetch('/status').then(r=>r.json()).then(function(d){
     curSsid=d.ssid||'';
+    curConn=d.conn||'';
     document.getElementById('cur-ssid').textContent=d.ssid||'---';
     document.getElementById('cur-ip').textContent=d.ip||'---';
     return fetch('/api/piprofiles');
@@ -289,6 +292,7 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 <div class="row"><span class="k">Pi link</span><span class="v" id="pi-link">---</span></div>
 <div class="row"><span class="k">USB port</span><span class="v acc" id="usb-port">---</span></div>
 <div class="row"><span class="k">Pi network</span><span class="v on" id="pi-ssid">---</span></div>
+<div class="row"><span class="k">Pi profile</span><span class="v" id="pi-conn">---</span></div>
 <div class="row"><span class="k">Pi IP</span><span class="v" id="pi-ip">---</span></div>
 <div class="row"><span class="k">ESP network</span><span class="v" id="esp-ssid">---</span></div>
 <div class="row"><span class="k">ESP IP</span><span class="v" id="esp-ip">---</span></div>
@@ -317,6 +321,7 @@ function poll(){
     set('pi-link', d.pi_connected?'Online':'Offline', d.pi_connected?'on':'off');
     set('usb-port', d.usb_port||'---');
     set('pi-ssid', d.pi_ssid||'---', d.pi_connected?'on':'');
+    set('pi-conn', d.pi_conn||'---');
     set('pi-ip',   d.pi_ip||'---');
     set('esp-ssid', d.esp_ssid||'---', d.esp_connected?'acc':'');
     set('esp-ip',  d.esp_ip||'---');

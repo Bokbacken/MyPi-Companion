@@ -249,7 +249,9 @@ void drawPiMenuContent() {
     if (i >= total) break;
     bool isHl   = (i == piMenuIndex);
     bool isBack = (i == numDynProfiles);
-    bool isAt   = (!isBack && strcmp(dynProfiles[i], activeSSID) == 0);
+    // Compare against activeConn (NM connection name), not activeSSID (SSID).
+    // dynProfiles[] holds NM connection names from the Pi.
+    bool isAt   = (!isBack && strcmp(dynProfiles[i], activeConn) == 0);
     int      y  = CONTENT_TOP + slot * MENU_ROW_H;
     uint16_t bg = isHl ? COL_HEADER : COL_BG;
     uint16_t fg = isBack ? (isHl ? COL_ACCENT : COL_DIM)

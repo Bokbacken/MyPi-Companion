@@ -165,13 +165,15 @@ void hidInstallOnPi() {
     // Broadcast find result to all possible ACM ports.
     // Echoing directly to each ACM port is safe: if the port does not
     // exist or we lack permission, 2>/dev/null suppresses the error.
+    // NOTE: bash applies redirections left to right, so 2>/dev/null
+    // must come BEFORE "> $P" or the open error still reaches the tty.
     // The ".:" in the reply also proves "." is typed correctly
     // (needed later for install.sh).
     hidCancelLine();
     hidTypeLayout(idx,
       "for D in $(find /media /run/media -maxdepth 3 -name RIGSETUP -type d 2>/dev/null);"
       " do for P in /dev/ttyACM0 /dev/ttyACM1 /dev/ttyACM2 /dev/ttyACM3;"
-      " do echo RIGSETUP:.:$D > $P 2>/dev/null; done; break; done"
+      " do echo RIGSETUP:.:$D 2>/dev/null > $P; done; break; done"
     );
 
     // Read Serial for up to 1500 ms.
@@ -223,7 +225,7 @@ void hidInstallOnPi() {
     while (Serial.available()) Serial.read();  // flush
 
     String cmd = "stty -F " + port + " -hupcl 2>/dev/null; "
-               + "echo ACMOK:" + String(i) + " > " + port + " 2>/dev/null";
+               + "echo ACMOK:" + String(i) + " 2>/dev/null > " + port;
     hidType(cmd.c_str());
 
     unsigned long t0 = millis();
@@ -277,9 +279,16 @@ void hidInstallOnPi() {
         else if (rxLine == "RIG:INSTALL_DAEMON")  hidSetStatus(0, "Copying daemon", COL_DIM);
         else if (rxLine == "RIG:INSTALL_SERVICE") hidSetStatus(0, "Setup service",  COL_DIM);
         else if (rxLine == "RIG:INSTALL_DONE") {
-          hidSetStatus(0, "Done!",      COL_ACTIVE);
-          hidSetStatus(1, "Reboot Pi", COL_ACTIVE);
+          hidSetStatus(0, "Done!",         COL_ACTIVE);
+          hidSetStatus(1, "Connecting...", COL_DIM);
           mscEject();
+          // Give the USB device time to re-enumerate and the newly
+          // started daemon time to open the ACM port before we send
+          // HELLO.  The main loop's handleSerial() picks up the ACK
+          // and sets piConnected = true without any extra logic here.
+          delay(3000);
+          while (Serial.available()) Serial.read();  // flush stale bytes
+          Serial.println("HELLO");
           return;
         }
         else if (rxLine.startsWith("RIG:INSTALL_ERR")) {
