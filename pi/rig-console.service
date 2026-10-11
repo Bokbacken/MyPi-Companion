@@ -1,0 +1,25 @@
+# HMS Rig Console — systemd service unit (reference copy)
+#
+# This file is for documentation only.  The authoritative version is written
+# inline by install.sh using the runtime INSTALL_DIR and RUN_USER variables.
+# Do NOT install this file manually; run install.sh instead.
+
+[Unit]
+Description=HMS Rig Console Daemon
+# NOTE: BindsTo is intentionally omitted.
+#   BindsTo=dev-ttyACM0.device would cause systemd to kill the service the
+#   moment the USB device re-enumerates — preventing the daemon's own
+#   reconnect loop from recovering the connection.  The daemon polls for the
+#   port itself and handles reconnection.
+
+[Service]
+User=pi
+ExecStart=/usr/bin/python3 /opt/rig-console/rig_daemon.py
+# Restart=always so systemd restarts on both failures AND clean exits.
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
