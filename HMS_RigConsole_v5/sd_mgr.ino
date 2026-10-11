@@ -28,8 +28,11 @@ static bool _sdOnBoot  = false;
 
 bool sdMount() {
   if (_sdMounted) return true;
-  // mode1bit = true, no auto-format
-  if (!SD_MMC.begin("/sdcard", true, false, SDMMC_FREQ_DEFAULT)) {
+  // mode1bit = true, no auto-format.  Single attempt — never retry
+  // here: a blocking retry loop would stall the HTTP server if the
+  // SDMMC peripheral is in a bad state (e.g. right after OTA reset).
+  bool ok = SD_MMC.begin("/sdcard", true, false, SDMMC_FREQ_DEFAULT);
+  if (!ok) {
     Serial.println("SD: mount failed (no card?)");
     return false;
   }
@@ -58,7 +61,10 @@ bool sdIsShareActive() { return mscBackendIsSD(); }
 uint32_t sdSectorCount() {
   if (!_sdMounted) return 0;
   if (SD_MMC.sectorSize() != 512) return 0;
-  return (uint32_t)SD_MMC.numSectors();
+  // NOTE: SD_MMC.numSectors() returns the *filesystem* size (totalBytes),
+  // which excludes FAT tables/reserved area. MSC must expose the whole
+  // physical card, so derive the count from the card capacity (CSD).
+  return (uint32_t)(SD_MMC.cardSize() / 512ULL);
 }
 
 bool sdReadSector(uint8_t *buf, uint32_t sector) {
@@ -82,6 +88,7 @@ void sdShareStop() {
   mscSetBackendNone();
   // The host may have changed the filesystem — remount for a fresh view.
   if (_sdMounted) { SD_MMC.end(); _sdMounted = false; }
+  delay(200);   // let the card settle after the last host write
   sdMount();
 }
 

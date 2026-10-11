@@ -1,7 +1,8 @@
 # Pi-side files
 
 This folder contains the source files that are embedded in the ESP32 firmware
-as a virtual USB disk (`msc_image.h`).  When the user runs **Install on Pi**
+(`rigsetup_files.h`), copied to `/rigsetup/` on FFat at boot and served
+as the virtual `RIGSETUP` USB disk.  When the user runs **Install on Pi**
 from the Rig Console web UI or touch menu, the ESP32 mounts this disk and the
 Pi runs `install.sh` via HID automation.
 
@@ -15,16 +16,18 @@ Pi runs `install.sh` via HID automation.
 | `rig-console.service` | Reference copy of the systemd unit (written inline by install.sh) |
 | `pyserial-3.5-py2.py3-none-any.whl` | Bundled offline wheel — no internet needed during install |
 
-## Regenerating msc_image.h
+## Regenerating rigsetup_files.h
 
-After editing any file in this folder, regenerate the embedded disk image:
+After editing any file in this folder, regenerate the embedded file arrays:
 
 ```bash
-python3 tools/gen_msc_image.py
+python3 tools/gen_rigsetup_h.py
 ```
 
-This updates `HMS_RigConsole_v5/msc_image.h`.  Commit both the source files
-and the regenerated header together.
+This updates `HMS_RigConsole_v5/rigsetup_files.h`.  Commit both the source files
+and the regenerated header together.  Files already present in `/rigsetup/` on the
+device are not overwritten; delete them on the Storage page to restore the new
+defaults on the next boot.
 
 ## Notes
 

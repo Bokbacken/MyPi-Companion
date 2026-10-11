@@ -113,6 +113,7 @@ ul.files{list-style:none;font-family:var(--mono);font-size:12px;color:var(--mute
     <div class="row">
       <button class="btn btn-b" onclick="rsStart()">Start</button>
       <button class="btn btn-g" onclick="rsStop()">Stop</button>
+      <button class="btn btn-r" onclick="rsForceCopy()" title="Overwrite /rigsetup/ files with firmware built-ins">&#8635; Force copy</button>
     </div>
     <ul class="files" id="rs-files"></ul>
     <p class="note">Files sourced from /rigsetup/ on internal storage</p>
@@ -194,6 +195,15 @@ async function rsRefresh(){
 }
 async function rsStart(){ try{ await post('/api/rigsetup/start'); toast('RIGSETUP started'); }catch(e){ toast('Error: '+e.message,4000); } rsRefresh(); sdRefresh(); }
 async function rsStop(){ try{ await post('/api/rigsetup/stop'); toast('RIGSETUP stopped'); }catch(e){ toast('Error: '+e.message,4000); } rsRefresh(); }
+async function rsForceCopy(){
+  if(!confirm('This overwrites ALL files in /rigsetup/ with the versions built into the firmware.\\nAny manual edits will be lost.\\n\\nContinue?')) return;
+  try{
+    const r = await fetch('/api/rigsetup/force-copy',{method:'POST'});
+    const t = await r.text();
+    if(r.ok) toast(t, 3000); else toast('Error: '+t, 5000);
+  }catch(e){ toast('Error: '+e.message,5000); }
+  rsRefresh();
+}
 
 // ── File manager ──
 function selectTab(fs){

@@ -21,6 +21,8 @@ ESP32 → Pi:
   CMD:STOP_AP                  — user closed AP mode (informational)
   CMD:TERM_OPEN                — open PTY bash terminal session
   CMD:TERM_CLOSE               — close PTY bash terminal session
+  CMD:MSC_EJECT                — ESP is about to remove its USB disk (SD Share /
+                                 RIGSETUP): sync + unmount it, then reply
   TERM:IN:<b64>                — base64-encoded keystrokes from browser terminal
   CTL:RESIZE:<cols>:<rows>     — browser terminal resize notification
 
@@ -42,6 +44,8 @@ Pi → ESP32:
   SCAN_RESULT:<ssid>:<signal>:<freq>  — one network found during scan
   SCAN_DONE                    — scan finished (or failed silently)
   TERM:OUT:<b64>               — base64-encoded PTY output to browser terminal
+  OK:MSC_EJECT                 — ESP disk flushed and unmounted (safe to remove)
+  ERR:MSC_EJECT:<reason>       — flushed, but unmount failed
 
 Requirements: python3-serial (apt-get install python3-serial)
 Permissions:  user in group 'dialout', polkit rule for nmcli
@@ -49,6 +53,7 @@ Permissions:  user in group 'dialout', polkit rule for nmcli
 
 import base64
 import glob
+import json
 import logging
 import os
 import pty
@@ -347,6 +352,83 @@ def scan_wifi(ser: serial.Serial) -> None:
 
 
 # ---------------------------------------------------------------------------
+# ESP32 USB disk (MSC) eject
+# ---------------------------------------------------------------------------
+ESP_MSC_VENDOR = "HMS"   # SCSI vendor ID reported by msc.ino
+
+
+def _esp_msc_mounts() -> List[tuple]:
+    """Return [(device, mountpoint)] for mounted partitions of the ESP32 disk."""
+    r = subprocess.run(
+        ["lsblk", "-J", "-p", "-o", "NAME,VENDOR,MOUNTPOINT"],
+        capture_output=True, text=True, timeout=10,
+    )
+    mounts = []
+
+    def walk(node: dict) -> None:
+        if node.get("mountpoint"):
+            mounts.append((node["name"], node["mountpoint"]))
+        for child in node.get("children") or []:
+            walk(child)
+
+    for disk in json.loads(r.stdout or "{}").get("blockdevices", []):
+        if (disk.get("vendor") or "").strip() == ESP_MSC_VENDOR:
+            walk(disk)
+    return mounts
+
+
+def _unmount(dev: str, mnt: str, lazy: bool) -> subprocess.CompletedProcess:
+    """udisksctl first (works without root for udisks mounts), then sudo umount."""
+    cmd = ["udisksctl", "unmount", "-b", dev, "--no-user-interaction"]
+    if lazy:
+        cmd.append("--force")              # udisks: --force = lazy unmount
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+    if r.returncode != 0:
+        # Fallback for mounts not owned by udisks (e.g. manual sudo mount)
+        cmd = ["sudo", "-n", "umount"] + (["-l"] if lazy else []) + [mnt]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+    return r
+
+
+def _holders(mnt: str) -> str:
+    """Names of processes keeping mnt busy (best effort, for the log)."""
+    try:
+        r = subprocess.run(["fuser", "-vm", mnt], capture_output=True, text=True, timeout=5)
+        names = {ln.split()[-1] for ln in r.stderr.splitlines()[1:] if ln.split()}
+        names.discard(mnt + ":")
+        return ", ".join(sorted(names)) or "unknown"
+    except Exception:
+        return "unknown"
+
+
+def eject_esp_msc() -> Optional[str]:
+    """
+    Flush and unmount the ESP32 USB disk before the ESP removes it.
+    Returns None on success, otherwise a short error string.
+    sync always runs, so cached writes are on the card even if unmount fails.
+    """
+    try:
+        subprocess.run(["sync"], timeout=30)
+        errors = []
+        for dev, mnt in _esp_msc_mounts():
+            r = _unmount(dev, mnt, lazy=False)
+            if r.returncode != 0 and "busy" in (r.stderr or "").lower():
+                # Something (typically a file manager window) still has the
+                # mount open.  Data is already synced and the ESP removes the
+                # media regardless, so detach lazily instead of leaving a
+                # dead mount behind.
+                log.warning("%s busy (held by: %s) — lazy unmount", mnt, _holders(mnt))
+                r = _unmount(dev, mnt, lazy=True)
+            if r.returncode == 0:
+                log.info("Unmounted %s (%s)", dev, mnt)
+            else:
+                errors.append(f"{dev}: {(r.stderr or '').strip()[:60]}")
+        return "; ".join(errors) or None
+    except Exception as exc:
+        return str(exc)[:80]
+
+
+# ---------------------------------------------------------------------------
 # Sending  (always hold _serial_lock)
 # ---------------------------------------------------------------------------
 def send(ser: serial.Serial, msg: str) -> None:
@@ -563,6 +645,10 @@ def dispatch(ser: serial.Serial, msg: str) -> None:
     elif msg == "CMD:TERM_CLOSE":
         log.info("Terminal session closed by browser.")
         close_terminal()
+
+    elif msg == "CMD:MSC_EJECT":
+        err = eject_esp_msc()
+        send(ser, "OK:MSC_EJECT" if err is None else f"ERR:MSC_EJECT:{err}")
 
     elif msg.startswith("TERM:IN:"):
         term_input(msg[8:])

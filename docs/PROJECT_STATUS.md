@@ -59,8 +59,8 @@ msc.ino                — USB Mass Storage: exposes the RIGSETUP disk (install.
 jd9853_init.h          — display register init sequence
 touch_axs5106l.h       — AXS5106L I2C touch driver
 canvas_psram.h         — Arduino_Canvas_PSRAM
-msc_image.h            — MSC FAT12 disk image (PROGMEM) — GENERATED from pi/ by
-                         tools/gen_msc_image.py (never edit by hand)
+rigsetup_files.h       — pi/ files as C arrays + RIGSETUP_FILES[] manifest — GENERATED
+                         from pi/ by tools/gen_rigsetup_h.py (never edit by hand)
 page_html.h            — dashboard, networks, install, sysinfo, OTA pages
 profiles_html.h        — NVS profile manager page
 macros_html.h          — v5: GUI macro / menu / quick-button editor (/macros)
@@ -79,14 +79,14 @@ hms_logo_web.h         — PNG logo for the web banner
 
 Pi side lives in [`pi/`](../pi/): `install.sh`, `uninstall.sh`, `rig_daemon.py`
 (systemd service `rig-console`), `rig-console.service` (reference copy) and the offline
-`pyserial` wheel. After editing anything in `pi/`, run `python3 tools/gen_msc_image.py`
-from the repo root and commit `pi/` together with the regenerated `msc_image.h`.
-CI fails if `msc_image.h` is out of date with `pi/`.
+`pyserial` wheel. After editing anything in `pi/`, run `python3 tools/gen_rigsetup_h.py`
+from the repo root and commit `pi/` together with the regenerated `rigsetup_files.h`.
+CI fails if `rigsetup_files.h` is out of date with `pi/`.
 
-`gen_msc_image.py` writes `INSTALL.SH`, `DAEMON.PY` and `PYSERIAL.WHL` in contiguous
-clusters; the boot sector is identical to the original hand-built image. One FAT sector
-can only address clusters ≤ 340 (fsck.fat warns about this — inherited and harmless),
-so the files must stay below ~173 KB in total; the script enforces the limit.
+At boot `littlefs_mgr.ino` writes any missing file to `/rigsetup/` on FFat
+(`rig_daemon.py` is stored as `daemon.py` and the wheel as `pyserial.whl`, the names
+`install.sh` expects). `fat12_builder.ino` builds the 256 KB FAT12 `RIGSETUP` image in
+PSRAM from `/rigsetup/` each time the disk is presented (2 FAT sectors → up to ~250 KB).
 
 ---
 
@@ -333,8 +333,8 @@ commit both. The script asserts: no FitAddon, `termFit` present, vertical QB pre
 - [x] HID keyboard layout auto-detection for Install on Pi
 - [x] Auto-connect after install (`HELLO` after `RIG:INSTALL_DONE`)
 - [x] `STATUS:CONN` — real SSID separated from NM connection name
-- [x] Pi-side sources in `pi/` + `uninstall.sh`; `tools/gen_msc_image.py` + CI freshness check
+- [x] Pi-side sources in `pi/` + `uninstall.sh`; `tools/gen_rigsetup_h.py` + CI freshness check
 - [ ] First flash via USB (new partition table), then test OTA and FFat on hardware
-- [ ] Test Install on Pi with the regenerated `msc_image.h` (contiguous layout) on hardware
+- [ ] Test Install on Pi with RIGSETUP built from `/rigsetup/` on hardware
 - [ ] Verify `STATUS:CONN` / SSID display on hardware
 - [ ] Verify submenu handling in `macros_html.h` (`mkEntry()`)
