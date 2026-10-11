@@ -54,6 +54,7 @@ SECTORS_PER_TRACK   = 1          # CHS geometry is unused for a USB MSC disk;
 NUM_HEADS           = 1          # values match the original hand-built image
 DRIVE_NUMBER        = 0x80
 VOLUME_SERIAL       = b"\xDE\xAD\xBE\xEF"
+VOLUME_LABEL        = b"RIGSETUP   "   # 11 bytes, boot sector + root dir entry
 
 # Derived offsets
 FAT1_START   = RESERVED_SECTORS * BYTES_PER_SECTOR
@@ -110,11 +111,24 @@ def make_boot_sector() -> bytes:
     bs[37] = 0x00
     bs[38] = 0x29                       # extended boot signature
     bs[39:43] = VOLUME_SERIAL           # stored byte-for-byte as in the original
-    bs[43:54] = b"RIGSETUP   "         # volume label (11 bytes)
+    bs[43:54] = VOLUME_LABEL
     bs[54:62] = b"FAT12   "
     bs[510] = 0x55
     bs[511] = 0xAA
     return bytes(bs)
+
+
+def make_label_entry() -> bytes:
+    """Return the root-directory volume label entry.
+
+    Linux (blkid/udisks) reads the label from this entry, not from the boot
+    sector. Without it the disk mounts as /media/<user>/EFBE-ADDE instead of
+    /media/<user>/RIGSETUP and hidInstallOnPi() cannot find it.
+    """
+    de = bytearray(32)
+    de[0:11] = VOLUME_LABEL
+    de[11]   = 0x08  # attribute: volume label
+    return bytes(de)
 
 
 def make_dir_entry(name83: bytes, start_cluster: int, size: int) -> bytes:
@@ -123,6 +137,7 @@ def make_dir_entry(name83: bytes, start_cluster: int, size: int) -> bytes:
     de = bytearray(32)
     de[0:11] = name83
     de[11]   = 0x20  # attribute: archive
+    de[12]   = 0x18  # NT case flags: show base name and extension in lower case
     struct.pack_into("<H", de, 26, start_cluster)
     struct.pack_into("<I", de, 28, size)
     return bytes(de)
@@ -181,8 +196,8 @@ def build_image() -> bytes:
     image[FAT1_START : FAT1_START + len(fat)] = fat
     image[FAT2_START : FAT2_START + len(fat)] = fat
 
-    # Write root directory
-    for i, de in enumerate(dir_entries):
+    # Write root directory: volume label first (as mkfs.fat does), then files
+    for i, de in enumerate([make_label_entry()] + dir_entries):
         off = ROOT_START + i * 32
         image[off : off + 32] = de
 
