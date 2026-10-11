@@ -15,7 +15,8 @@
 //    GET  /status             — JSON status (Pi + ESP)
 //    GET  /api/info           — JSON system diagnostics
 //    POST /addwifi            — add Pi profile via USB serial
-//    POST /api/installonpi    — set pendingPiInstall flag
+//    POST /api/installonpi    — set install target + pendingPiInstall flag
+//    GET  /api/installcfg     — saved install mode / layout / user (no password)
 //    GET  /profiles           — NVS profile manager page
 //    GET  /api/nvs            — NVS slot JSON (shared pool)
 //    GET  /api/piprofiles     — Pi-side profile list
@@ -142,10 +143,68 @@ void handleAddWifi() {
   server.send(200, "text/plain", String("Sending \"") + ssid + "\" to Pi...");
 }
 
+// GET /api/installcfg — saved install target (never the password)
+void handleApiInstallCfg() {
+  String user = piUser;
+  user.replace("\\", "\\\\");
+  user.replace("\"", "\\\"");
+  String json = String("{\"mode\":") + piInstallMode +
+                ",\"layout\":" + piLayoutForce +
+                ",\"user\":\"" + user + "\"}";
+  server.send(200, "application/json", json);
+}
+
+static bool _isPrintableAscii(const String &s) {
+  for (size_t i = 0; i < s.length(); i++) {
+    char c = s[i];
+    if (c < 0x20 || c > 0x7E) return false;
+  }
+  return true;
+}
+
 // POST /api/installonpi — triggers HID installer via loop()
+//   mode=desktop|cli, user=<name>, pass=<password>, layout=-1..4
+//   Without parameters the saved mode is used (old v5 behaviour).
 void handleApiInstallOnPi() {
+  if (pendingPiInstall) {
+    server.send(409, "text/plain", "An installation is already pending.");
+    return;
+  }
+  if (server.hasArg("mode")) {
+    uint8_t mode   = server.arg("mode") == "cli" ? 1 : 0;
+    int     layout = server.hasArg("layout") ? server.arg("layout").toInt() : -1;
+    if (layout < -1 || layout > 4) layout = -1;
+    String  user   = server.arg("user");
+    String  pass   = server.arg("pass");
+
+    if (mode == 1) {
+      if (user.isEmpty() || pass.isEmpty()) {
+        server.send(400, "text/plain", "CLI mode needs both username and password.");
+        return;
+      }
+      if (user.length() >= sizeof(piUser) || pass.length() >= sizeof(piPass) ||
+          !_isPrintableAscii(user) || !_isPrintableAscii(pass)) {
+        server.send(400, "text/plain",
+          "Username/password must be printable ASCII (max 32/64 chars) - the HID keyboard cannot type other characters.");
+        return;
+      }
+      strlcpy(piUser, user.c_str(), sizeof(piUser));
+      strlcpy(piPass, pass.c_str(), sizeof(piPass));   // RAM only
+    }
+    piInstallMode = mode;
+    piLayoutForce = (int8_t)layout;
+
+    Preferences p; p.begin("rigcfg", false);
+    p.putUChar("instMode", piInstallMode);
+    p.putChar("instLayout", piLayoutForce);
+    if (mode == 1) p.putString("instUser", piUser);
+    p.end();
+  }
   pendingPiInstall = true;
-  server.send(200, "text/plain", "Installation started via USB HID — watch the Pi display.");
+  server.send(200, "text/plain",
+    piInstallMode == 1
+      ? "CLI installation started via USB HID - watch the ESP32 display (takes 1-2 min)."
+      : "Installation started via USB HID - watch the Pi display.");
 }
 
 
@@ -633,6 +692,7 @@ void startWebServer() {
   server.on("/api/info",  handleApiInfo);
   server.on("/addwifi",   HTTP_POST, handleAddWifi);
   server.on("/api/installonpi", HTTP_POST, handleApiInstallOnPi);
+  server.on("/api/installcfg",  HTTP_GET,  handleApiInstallCfg);
 
   // ── NVS profile manager ────────────────────────────────────
   server.on("/profiles",          handleProfiles);

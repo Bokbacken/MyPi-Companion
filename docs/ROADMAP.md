@@ -25,6 +25,24 @@ macro pool on FFat · base64-correct macros · `termFit()` · FFat file manageme
 
 ---
 
+## v6 (in progress, branch per feature)
+
+### v6.1 CLI / headless install — implemented, not yet hardware-tested
+- Install mode Desktop / CLI chosen on `/installonpi` (stored in NVS `rigcfg`, except the
+  password, which is RAM-only and wiped after each run)
+- CLI: console login on tty1 via HID, `sudo` via `read -rs` + `sudo -S -v`, mount
+  `RIGSETUP` by label, install, unmount, log out
+- Keyboard layout selectable (Auto / US / Swedish-Danish / German / French / ES-IT-PT)
+- `install.sh`: unzip the offline pyserial wheel when pip is missing (Lite), service gets
+  `PYTHONPATH=/opt/rig-console/lib`; new code `RIG:INSTALL_ERR_DEPS`
+- USB networking (NCM) is deprioritized: with CLI install it is not needed
+
+### Later v6 candidates
+RPC channel + daemon versioning · web login / PIN · robustness (connection limit, OTA
+rollback) · Pi system panel · Pi file manager · recipes + placeholders · web UI cleanup.
+
+---
+
 ## Next (priority order)
 
 ### 1. Placeholders with session memory — high

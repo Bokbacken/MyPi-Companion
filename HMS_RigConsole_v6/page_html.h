@@ -207,6 +207,9 @@ ul{font-size:13px;color:#8b949e;padding-left:18px;margin-bottom:14px;line-height
 .btn:disabled{background:#484f58;cursor:not-allowed}
 .msg{margin-top:12px;padding:10px;border-radius:6px;font-size:13px;background:#0f3520;color:#3fb950;display:none;text-align:center}
 .err{background:#3a0f0f!important;color:#f85149!important}
+.seg{display:flex;gap:8px;margin-bottom:12px}.seg label{flex:1;background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:9px;font-size:13px;cursor:pointer;text-align:center}
+.fl{display:block;font-size:12px;color:#8b949e;margin:8px 0 4px}
+.in{width:100%;padding:9px;background:#0d1117;color:#e6e6e6;border:1px solid #30363d;border-radius:6px;font-size:14px;margin-bottom:6px}
 footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 </style></head><body>
 <div class="hdr">
@@ -216,31 +219,67 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 <div class="card">
 <span class="ic">📦</span>
 <h2>Rig Console daemon installer</h2>
-<p>This will install the HMS Rig Console daemon on the connected Raspberry Pi via USB HID keyboard emulation.</p>
-<ul>
-<li>Pi must be connected via USB</li>
-<li>Pi must be logged in with a desktop session</li>
-<li>Installation takes approximately 30–60 seconds</li>
-<li>Do not disconnect USB during install</li>
+<p>Installs the HMS Rig Console daemon on the connected Raspberry Pi via USB HID keyboard emulation.</p>
+<div class="seg">
+<label><input type="radio" name="mode" value="desktop" checked onchange="upd()"> 🖥️ Desktop</label>
+<label><input type="radio" name="mode" value="cli" onchange="upd()"> ⌨️ CLI / headless</label>
+</div>
+<ul id="hdesk">
+<li>Pi logged in with a desktop session</li>
+<li>A terminal is opened with Ctrl+Alt+T</li>
 </ul>
+<div id="hcli" style="display:none">
+<ul>
+<li>Raspberry Pi OS Lite (or any Pi on the text console)</li>
+<li>The ESP32 logs in on the console, installs, then logs out</li>
+<li>The password is kept in RAM only for this install and never stored</li>
+</ul>
+<label class="fl">Pi username</label>
+<input class="in" id="user" autocomplete="username" maxlength="32">
+<label class="fl">Pi password</label>
+<input class="in" id="pass" type="password" autocomplete="current-password" maxlength="64">
+</div>
+<label class="fl">Pi keyboard layout</label>
+<select class="in" id="layout">
+<option value="-1">Auto-detect</option>
+<option value="0">English (US)</option>
+<option value="1">Swedish / Danish</option>
+<option value="2">German</option>
+<option value="3">French</option>
+<option value="4">Spanish / Italian / Portuguese</option>
+</select>
+<ul><li>Takes about 1–2 minutes — do not disconnect USB</li></ul>
 <button class="btn" id="btn" onclick="install()">Install / Reinstall on Pi</button>
 <div class="msg" id="msg"></div>
 </div>
 <footer><a href="/" style="color:#484f58">HMS Rig Console</a></footer>
 <script>
+function $(i){return document.getElementById(i);}
+function mode(){return document.querySelector('input[name=mode]:checked').value;}
+function upd(){var c=mode()==='cli';$('hcli').style.display=c?'block':'none';$('hdesk').style.display=c?'none':'block';}
+fetch('/api/installcfg').then(r=>r.json()).then(function(c){
+  document.querySelector('input[name=mode][value='+(c.mode==1?'cli':'desktop')+']').checked=true;
+  $('user').value=c.user||'';$('layout').value=String(c.layout);upd();
+}).catch(function(){});
+function show(t,err){var m=$('msg');m.textContent=t;m.className=err?'msg err':'msg';m.style.display='block';}
 function install(){
-  var b=document.getElementById('btn');
-  b.disabled=true;
-  b.textContent='Starting...';
-  fetch('/api/installonpi',{method:'POST'})
-  .then(r=>r.text()).then(function(t){
-    var m=document.getElementById('msg');
-    m.textContent=t;m.style.display='block';
-    b.textContent='Installation started';
+  var b=$('btn'),f=new URLSearchParams();
+  f.append('mode',mode());f.append('layout',$('layout').value);
+  if(mode()==='cli'){
+    var u=$('user').value.trim(),p=$('pass').value;
+    if(!u||!p){show('Enter username and password',true);return;}
+    if(/[^\x20-\x7e]/.test(u+p)){show('Only plain ASCII characters can be typed by the HID keyboard',true);return;}
+    f.append('user',u);f.append('pass',p);
+  }
+  b.disabled=true;b.textContent='Starting...';
+  fetch('/api/installonpi',{method:'POST',body:f})
+  .then(function(r){return r.text().then(function(t){return {ok:r.ok,t:t};});})
+  .then(function(x){
+    $('pass').value='';show(x.t,!x.ok);
+    if(x.ok){b.textContent='Installation started';setTimeout(function(){b.disabled=false;b.textContent='Install / Reinstall on Pi';},20000);}
+    else{b.disabled=false;b.textContent='Install / Reinstall on Pi';}
   }).catch(function(){
-    var m=document.getElementById('msg');
-    m.textContent='Connection error';m.className='msg err';m.style.display='block';
-    b.disabled=false;b.textContent='Install / Reinstall on Pi';
+    show('Connection error',true);b.disabled=false;b.textContent='Install / Reinstall on Pi';
   });
 }
 </script></body></html>)html";

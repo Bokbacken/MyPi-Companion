@@ -4,6 +4,8 @@
 #
 #  Usage (manual):   sudo bash install.sh
 #  Usage (via HID):  sudo bash /media/<user>/RIGSETUP/install.sh /dev/ttyACMx
+#                    sudo bash /mnt/rigsetup/install.sh /dev/ttyACMx   (CLI mode,
+#                    read-only mount; this script never writes to its own disk)
 #
 #  $1 (optional) — feedback serial port.
 #  When supplied the script echoes RIG:* status codes to that
@@ -16,6 +18,7 @@
 #    RIG:INSTALL_SERVICE
 #    RIG:INSTALL_DONE
 #    RIG:INSTALL_ERR_NOROOT
+#    RIG:INSTALL_ERR_DEPS
 #    RIG:INSTALL_ERR_COPY
 #    RIG:INSTALL_ERR_SERVICE
 # ============================================================
@@ -82,6 +85,19 @@ else
   # Fallback: try apt (requires internet)
   apt-get install -y -q python3-serial || true
 fi
+# Raspberry Pi OS Lite ships without pip, so the pip step above may have
+# done nothing. pyserial is pure Python: unpack the wheel into a private
+# lib dir instead; the service adds it to PYTHONPATH.
+mkdir -p "$INSTALL_DIR/lib"
+if ! python3 -c 'import serial' 2>/dev/null && [ -n "$WHL" ]; then
+  echo "      pip unavailable - unpacking wheel to $INSTALL_DIR/lib"
+  python3 -m zipfile -e "$WHL" "$INSTALL_DIR/lib"
+fi
+if ! PYTHONPATH="$INSTALL_DIR/lib" python3 -c 'import serial' 2>/dev/null; then
+  fb "RIG:INSTALL_ERR_DEPS"
+  echo "ERROR: pyserial could not be installed"
+  exit 1
+fi
 echo "      OK"
 
 # ── 2. Copy daemon ────────────────────────────────────────────
@@ -116,6 +132,8 @@ Description=HMS Rig Console Daemon
 
 [Service]
 User=$RUN_USER
+# Private lib dir: pyserial unpacked from the bundled wheel (no pip on Lite)
+Environment=PYTHONPATH=$INSTALL_DIR/lib
 ExecStart=/usr/bin/python3 $INSTALL_DIR/rig_daemon.py
 # Restart=always so systemd restarts on both failures AND clean exits
 # (a clean exit after USB disconnect would not restart with on-failure).

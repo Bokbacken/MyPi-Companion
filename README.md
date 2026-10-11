@@ -47,6 +47,16 @@ It can even install its own Pi-side helper software over USB — no internet, no
 - **One-click "Install on Pi"**: the ESP32 acts as a USB keyboard (HID), opens a terminal
   and types the install command. It auto-detects the Pi's keyboard layout (en_US, sv_SE,
   de_DE, fr_FR, es_ES) by typing a probe in each layout and listening for the answer.
+- **v6: two install modes**, chosen on `/installonpi`:
+  - **Desktop** — Raspberry Pi OS with desktop: Ctrl+Alt+T, automounted `RIGSETUP` (v5 flow).
+  - **CLI / headless** — Raspberry Pi OS Lite (no desktop, no network needed): the ESP32
+    logs in on the console (tty1) with the Pi user name and password you enter on the
+    page, authenticates `sudo`, mounts `RIGSETUP` by label at `/mnt/rigsetup`, runs the
+    installer, then unmounts and logs out. The daemon then runs as a systemd service
+    without anyone logged in. The password is kept in RAM only for that one run (never
+    stored in NVS) and is never typed into a shell where it could end up in history.
+    Pick the Pi's keyboard layout on the page (recommended for CLI: a wrong layout means
+    failed login attempts, not just harmless shell errors).
 - **Virtual USB disk (MSC)** `RIGSETUP` carries `install.sh`, the daemon and an offline
   pyserial wheel, so installation needs no internet. Progress (`RIG:INSTALL_*`) is shown on
   the display, and the console connects automatically when the install is done.
@@ -166,6 +176,7 @@ them there) to pick up new firmware defaults.
 | `/`         | Dashboard                                |
 | `/networks` | Pi network profiles                      |
 | `/profiles` | NVS profile manager                      |
+| `/installonpi` | Install the daemon on the Pi (Desktop or CLI mode) |
 | `/terminal` | xterm.js serial terminal                 |
 | `/macros`   | GUI macro, menu & quick-button editor    |
 | `/update`   | OTA firmware upload                      |
@@ -178,6 +189,9 @@ See [`examples/README.md`](examples/README.md) — 58 Raspberry Pi macros in 5 m
 
 ## Version history
 
+- **v6** (in progress) — v6.1: CLI/headless install mode (console login on Raspberry Pi
+  OS Lite); offline pyserial fallback without pip; keyboard layout selectable on
+  `/installonpi`. Sketch folder renamed to `HMS_RigConsole_v6/`.
 - **v5** — GUI macro/menu editor at `/macros`; terminal menu links to it; fixed web OTA
   (multipart upload); removed `partitions.csv` so FFat mounts; keyboard layout
   auto-detection for Install on Pi; auto-connect after install; real SSID vs. NM

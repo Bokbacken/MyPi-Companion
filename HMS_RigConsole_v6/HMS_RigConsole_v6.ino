@@ -129,6 +129,16 @@ int   espActiveSlot = -1;   // NVS slot ESP is connected on (-1=none)
 // cleared + executed in loop() (Arduino task).
 volatile bool pendingPiInstall = false;
 
+// Install target — see hid.ino.
+//   piInstallMode : 0 = Desktop (Ctrl+Alt+T + automount), 1 = CLI (console login)
+//   piUser        : Pi login name (persisted in NVS "rigcfg"/"instUser")
+//   piPass        : Pi password — RAM ONLY, wiped after every install attempt
+//   piLayoutForce : -1 = auto-detect keyboard layout, else HID_LAYOUTS index
+uint8_t piInstallMode = 0;
+char    piUser[33]    = "";
+char    piPass[65]    = "";
+int8_t  piLayoutForce = -1;
+
 // -----------------------------------------------------------
 //  KB ranges — 6 character groups (visible to all .ino files)
 // -----------------------------------------------------------
@@ -334,7 +344,12 @@ void setup() {
 
   // Load display-flip preference (same "rigcfg" namespace)
   { Preferences _p; _p.begin("rigcfg", true);
-    displayFlipped = _p.getBool("flip", false); _p.end(); }
+    displayFlipped = _p.getBool("flip", false);
+    // Install target (password is never stored)
+    piInstallMode = _p.getUChar("instMode", 0);
+    piLayoutForce = _p.getChar("instLayout", -1);
+    _p.getString("instUser", piUser, sizeof(piUser));
+    _p.end(); }
   if (displayFlipped) gfx->setRotation(2);
 
   // ---- Splash + async Wi-Fi scan ---------------------------

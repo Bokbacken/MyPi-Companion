@@ -12,7 +12,8 @@
 //
 //  Key functions:
 //    hidBegin()           — call in setup() AFTER mscBegin()
-//    hidInstallOnPi()     — full installation flow (called from touch.ino)
+//    hidInstallOnPi()     — full installation flow, Desktop or CLI mode
+//                           (called from touch.ino and via the web page)
 //    hidTestOpenTerminal()— quick HID smoke-test (open terminal + ls)
 // ============================================================
 
@@ -111,21 +112,48 @@ static void hidType(const char *s) {
 }
 
 // ----------------------------------------------------------
-//  hidInstallOnPi()
-//
-//  Full install flow:
-//  1. Open terminal (Ctrl+Alt+T).
-//  2. Poll until RIGSETUP volume auto-mounts.
-//     Searches both /media and /run/media (newer Pi OS/Ubuntu).
-//     Response is echoed back over /dev/ttyACMx so we can read
-//     it on the ESP32's Serial RX.
-//  3. Probe /dev/ttyACM{0..3} to confirm which port is ours.
-//  4. Run:  sudo bash <mount>/install.sh <port>
-//  5. Read RIG:* status codes and update display.
-//
-//  Blocks the loop for up to ~60 s (one-shot admin action).
+//  Serial line helpers
 // ----------------------------------------------------------
-void hidInstallOnPi() {
+static void hidFlushRx() {
+  while (Serial.available()) Serial.read();
+}
+
+// Wait up to ms for a line starting with prefix on the CDC port.
+// Other lines (e.g. daemon traffic during a reinstall) are ignored.
+static bool hidWaitLine(const char *prefix, uint32_t ms, String *line = nullptr) {
+  unsigned long t0 = millis();
+  String rx;
+  while (millis() - t0 < ms) {
+    while (Serial.available()) {
+      char c = Serial.read();
+      if (c == '\n') {
+        rx.trim();
+        if (rx.startsWith(prefix)) { if (line) *line = rx; return true; }
+        rx = "";
+      } else if (c != '\r') {
+        rx += c;
+      }
+    }
+    delay(20);
+  }
+  return false;
+}
+
+// Wipe the RAM-only Pi password (called at every exit of hidInstallOnPi).
+static void hidWipePass() {
+  memset(piPass, 0, sizeof(piPass));
+}
+
+static bool hidLayoutForced() {
+  return piLayoutForce >= 0 && piLayoutForce < (int8_t)HID_LAYOUT_COUNT;
+}
+
+// ----------------------------------------------------------
+//  Desktop preparation (unchanged v5 flow)
+//  Insert disk, Ctrl+Alt+T, find the automounted RIGSETUP
+//  directory and detect the keyboard layout on the way.
+// ----------------------------------------------------------
+static bool hidPrepDesktop(String &mountPath) {
 
   // ── 1. Insert disk FIRST (before opening terminal) ────────
   //  When the MSC volume appears, the Pi file manager pops a dialog
@@ -153,14 +181,15 @@ void hidInstallOnPi() {
 
   // ── 3. Find RIGSETUP mount point + detect keyboard layout ──
   hidSetStatus(0, "Waiting for disk", COL_DIM);
-  while (Serial.available()) Serial.read();   // flush RX
+  hidFlushRx();
 
-  String mountPath;
   const uint8_t firstLayout = hidLayoutIdx;
 
   for (int attempt = 0; attempt < 20 && mountPath.isEmpty(); attempt++) {
-    // Cycle through candidate layouts, starting with the last detected.
-    uint8_t idx = (firstLayout + attempt) % HID_LAYOUT_COUNT;
+    // Cycle through candidate layouts, starting with the last detected
+    // (or stay on the layout chosen on the web page).
+    uint8_t idx = hidLayoutForced() ? (uint8_t)piLayoutForce
+                                    : (firstLayout + attempt) % HID_LAYOUT_COUNT;
 
     // Broadcast find result to all possible ACM ports.
     // Echoing directly to each ACM port is safe: if the port does not
@@ -176,28 +205,11 @@ void hidInstallOnPi() {
       " do echo RIGSETUP:.:$D 2>/dev/null > $P; done; break; done"
     );
 
-    // Read Serial for up to 1500 ms.
-    unsigned long t0 = millis();
-    String rxLine;
-    while (millis() - t0 < 1500) {
-      while (Serial.available()) {
-        char c = Serial.read();
-        if (c == '\n') {
-          rxLine.trim();
-          if (rxLine.startsWith("RIGSETUP:.:")) {
-            mountPath    = rxLine.substring(11);
-            hidLayoutIdx = idx;              // this layout works
-          }
-          rxLine = "";
-        } else if (c != '\r') {
-          rxLine += c;
-        }
-      }
-      if (!mountPath.isEmpty()) break;
-      delay(20);
-    }
-
-    if (mountPath.isEmpty()) {
+    String line;
+    if (hidWaitLine("RIGSETUP:.:", 1500, &line)) {
+      mountPath    = line.substring(11);
+      hidLayoutIdx = idx;                    // this layout works
+    } else {
       char buf[20];
       snprintf(buf, sizeof(buf), "Try %s %2d", HID_LAYOUT_NAMES[idx], 20 - attempt);
       hidSetStatus(1, buf, COL_DIM);
@@ -208,66 +220,244 @@ void hidInstallOnPi() {
   if (mountPath.isEmpty()) {
     hidSetStatus(0, "ERR: no disk", COL_ERR);
     hidSetStatus(1, "not mounted", COL_ERR);
-    mscEject();
-    return;
+    return false;
+  }
+  return true;
+}
+
+// ----------------------------------------------------------
+//  CLI (headless) preparation
+//
+//  Target: Raspberry Pi OS Lite on the console (tty1) — no
+//  desktop, no automount. The HID keyboard types straight into
+//  the console, so we can log in like a person would:
+//
+//   a. Already at a shell (console autologin, open session)?
+//      A ping command is typed with every candidate layout; at a
+//      shell the right one answers over CDC, at a login prompt they
+//      just become failed login attempts. The password is therefore
+//      NEVER typed into a shell where it could end up in history.
+//   b. Otherwise log in: reset the prompt (Ctrl+C, Enter, wait out
+//      the "Login incorrect" delay), type user + password, then ping.
+//      Repeated per layout until the ping answers.
+//   c. Find our ACM port (shared with desktop flow).
+//   d. Authenticate sudo: the password is read with "read -rs"
+//      (not echoed, not in history) and fed to "sudo -S -v".
+//      Works with and without NOPASSWD sudo.
+//   e. Mount RIGSETUP by label at /mnt/rigsetup (read-only).
+// ----------------------------------------------------------
+static const char HID_CLI_MNT[] = "/mnt/rigsetup";
+static const char HID_PING[] =
+  "for P in /dev/ttyACM0 /dev/ttyACM1 /dev/ttyACM2 /dev/ttyACM3;"
+  " do echo RIGPING:.:$P 2>/dev/null > $P; done";
+
+static void hidEnter() { hidSendKey(0, 0x28); }
+
+// Bring the console back to a fresh "login:" prompt (or a clean shell line).
+// The 4 s wait covers login's FAIL_DELAY after an aborted password prompt.
+static void hidConsoleReset() {
+  hidCancelLine();
+  hidEnter();
+  delay(4000);
+}
+
+static bool hidCliLogin(bool &weLoggedIn) {
+  weLoggedIn = false;
+  const bool forced = hidLayoutForced();
+  const uint8_t n   = forced ? 1 : HID_LAYOUT_COUNT;
+  const uint8_t first = forced ? (uint8_t)piLayoutForce : hidLayoutIdx;
+  char buf[24];
+
+  // ── a. Already at a shell? ─────────────────────────────────
+  hidSetStatus(0, "Checking console", COL_DIM);
+  hidCancelLine();
+  hidEnter();
+  delay(800);
+  for (uint8_t i = 0; i < n; i++) {
+    uint8_t idx = (first + i) % HID_LAYOUT_COUNT;
+    snprintf(buf, sizeof(buf), "Shell? %s", HID_LAYOUT_NAMES[idx]);
+    hidSetStatus(1, buf, COL_DIM);
+    hidFlushRx();
+    hidTypeLayout(idx, HID_PING);
+    if (hidWaitLine("RIGPING:.:", 1500)) {
+      hidLayoutIdx = idx;
+      hidSetStatus(1, "Shell already open", COL_DIM);
+      return true;
+    }
   }
 
-  char mpBuf[24];
-  snprintf(mpBuf, sizeof(mpBuf), "%.20s", mountPath.c_str());
-  hidSetStatus(1, mpBuf, COL_DIM);
+  // ── b. Log in ──────────────────────────────────────────────
+  hidSetStatus(0, "Logging in", COL_DIM);
+  for (uint8_t i = 0; i < n; i++) {
+    uint8_t idx = (first + i) % HID_LAYOUT_COUNT;
+    snprintf(buf, sizeof(buf), "Login %s", HID_LAYOUT_NAMES[idx]);
+    hidSetStatus(1, buf, COL_DIM);
 
-  // ── 3. Find our ACM port ──────────────────────────────────
+    hidConsoleReset();
+    hidTypeLayout(idx, piUser);
+    delay(1500);                    // "Password:" prompt
+    hidTypeLayout(idx, piPass);
+    delay(5000);                    // PAM + motd + shell start
+
+    hidFlushRx();
+    hidTypeLayout(idx, HID_PING);
+    if (hidWaitLine("RIGPING:.:", 2500)) {
+      hidLayoutIdx = idx;
+      weLoggedIn   = true;
+      return true;
+    }
+  }
+
+  hidSetStatus(0, "ERR: login", COL_ERR);
+  hidSetStatus(1, "user/pass/layout?", COL_ERR);
+  return false;
+}
+
+static bool hidCliSudo(const String &port) {
+  hidSetStatus(0, "sudo auth", COL_DIM);
+  hidFlushRx();
+  hidType("read -rs RIGPW");
+  delay(400);
+  hidType(piPass);                  // consumed by read, never echoed
+  delay(400);
+  String cmd = "sudo -S -v <<<$RIGPW 2>/dev/null; unset RIGPW;"
+               " sudo -n true 2>/dev/null && echo SUDOOK 2>/dev/null > " + port;
+  hidType(cmd.c_str());
+  if (hidWaitLine("SUDOOK", 8000)) return true;
+  hidSetStatus(0, "ERR: sudo", COL_ERR);
+  hidSetStatus(1, "wrong password?", COL_ERR);
+  return false;
+}
+
+static bool hidCliMount(const String &port) {
+  hidSetStatus(0, "Mounting disk", COL_DIM);
+  String pre = String("sudo umount -l ") + HID_CLI_MNT + " 2>/dev/null; sudo mkdir -p " + HID_CLI_MNT;
+  hidType(pre.c_str());
+  delay(500);
+
+  String cmd = String("sudo mount -o ro /dev/disk/by-label/RIGSETUP ") + HID_CLI_MNT +
+               " 2>/dev/null; mountpoint -q " + HID_CLI_MNT +
+               " && echo MNTOK 2>/dev/null > " + port;
+  for (int attempt = 0; attempt < 10; attempt++) {
+    char buf[20];
+    snprintf(buf, sizeof(buf), "Try %2d", 10 - attempt);
+    hidSetStatus(1, buf, COL_DIM);
+    hidFlushRx();
+    hidType(cmd.c_str());
+    if (hidWaitLine("MNTOK", 1500)) return true;
+    delay(500);
+  }
+  hidSetStatus(0, "ERR: no disk", COL_ERR);
+  hidSetStatus(1, "mount failed", COL_ERR);
+  return false;
+}
+
+// Undo what the CLI flow did on the console. Typed ahead is fine:
+// the tty buffers it until the running command returns.
+static void hidCliCleanup(bool mounted, bool weLoggedIn) {
+  if (mounted) {
+    String cmd = String("cd /; sudo umount ") + HID_CLI_MNT + " 2>/dev/null";
+    hidType(cmd.c_str());
+  }
+  if (weLoggedIn) hidType("exit");  // leave the console at the login prompt
+}
+
+// ----------------------------------------------------------
+//  hidFindPort() — probe /dev/ttyACM{0..3} to confirm which
+//  Pi-side port is ours (shared by both flows).
+// ----------------------------------------------------------
+static bool hidFindPort(String &acmPort) {
   hidSetStatus(0, "Finding port...", COL_DIM);
 
-  String acmPort;
   for (int i = 0; i <= 3 && acmPort.isEmpty(); i++) {
     String port = "/dev/ttyACM" + String(i);
-    while (Serial.available()) Serial.read();  // flush
+    hidFlushRx();
 
     String cmd = "stty -F " + port + " -hupcl 2>/dev/null; "
                + "echo ACMOK:" + String(i) + " 2>/dev/null > " + port;
     hidType(cmd.c_str());
 
-    unsigned long t0 = millis();
-    String rxLine;
-    bool found = false;
-    while (millis() - t0 < 1200) {
-      while (Serial.available()) {
-        char c = Serial.read();
-        if (c == '\n') {
-          rxLine.trim();
-          if (rxLine.startsWith("ACMOK:")) found = true;
-          rxLine = "";
-        } else if (c != '\r') {
-          rxLine += c;
-        }
-      }
-      if (found) break;
-      delay(20);
-    }
-    if (found) acmPort = port;
+    if (hidWaitLine("ACMOK:", 1200)) acmPort = port;
   }
 
   if (acmPort.isEmpty()) {
     hidSetStatus(0, "ERR: no port", COL_ERR);
     hidSetStatus(1, "ACM0-3 failed", COL_ERR);
-    mscEject();
-    return;
+    return false;
   }
 
   char portBuf[24];
   snprintf(portBuf, sizeof(portBuf), "Port: %.14s", acmPort.c_str());
   hidSetStatus(1, portBuf, COL_DIM);
+  return true;
+}
 
-  // ── 4. Run installer ──────────────────────────────────────
+// ----------------------------------------------------------
+//  hidInstallOnPi()
+//
+//  Desktop mode (piInstallMode == 0):
+//    disk → Ctrl+Alt+T → find automount → port → install
+//  CLI mode (piInstallMode == 1):
+//    disk → console login → port → sudo → mount by label → install
+//    → unmount + logout
+//  Both: read RIG:* status codes from install.sh, then HELLO/ACK
+//  handshake and graceful eject.
+//
+//  Blocks the loop for up to ~2 min (one-shot admin action).
+// ----------------------------------------------------------
+void hidInstallOnPi() {
+  const bool cli = (piInstallMode == 1);
+  String mountPath, acmPort;
+  bool weLoggedIn = false, mounted = false;
+
+  if (cli && (!piUser[0] || !piPass[0])) {
+    // The password only lives in RAM and is wiped after each attempt,
+    // so CLI installs must be started from the web page.
+    hidSetStatus(0, "ERR: no login", COL_ERR);
+    hidSetStatus(1, "Start from web", COL_ERR);
+    hidWipePass();
+    return;
+  }
+
+  // ── Preparation ───────────────────────────────────────────
+  bool ok;
+  if (cli) {
+    hidSetStatus(0, "CLI install", COL_DIM);
+    hidSetStatus(1, "",            COL_DIM);
+    mscInsert();          // no automount on Lite — mounted by label later
+    delay(2000);
+    ok = hidCliLogin(weLoggedIn) && hidFindPort(acmPort) && hidCliSudo(acmPort);
+    if (ok) {
+      ok = hidCliMount(acmPort);
+      mounted = ok;
+      mountPath = HID_CLI_MNT;
+    }
+  } else {
+    ok = hidPrepDesktop(mountPath);
+    if (ok) {
+      char mpBuf[24];
+      snprintf(mpBuf, sizeof(mpBuf), "%.20s", mountPath.c_str());
+      hidSetStatus(1, mpBuf, COL_DIM);
+      ok = hidFindPort(acmPort);
+    }
+  }
+
+  if (!ok) {
+    if (cli) hidCliCleanup(mounted, weLoggedIn);
+    hidWipePass();
+    mscEject();
+    return;
+  }
+
+  // ── Run installer ─────────────────────────────────────────
   hidSetStatus(0, "Running install", COL_DIM);
 
   String installCmd = "sudo bash " + mountPath + "/install.sh " + acmPort;
   hidType(installCmd.c_str());
 
-  // ── 5. Read RIG:* feedback from install.sh ─────────────────
+  // ── Read RIG:* feedback from install.sh ───────────────────
   String rxLine;
-  unsigned long deadline = millis() + 60000UL;
+  unsigned long deadline = millis() + 90000UL;   // offline pip may be slow on Lite
 
   while (millis() < deadline) {
     while (Serial.available()) {
@@ -281,13 +471,16 @@ void hidInstallOnPi() {
         else if (rxLine == "RIG:INSTALL_DONE") {
           hidSetStatus(0, "Done!",         COL_ACTIVE);
           hidSetStatus(1, "Connecting...", COL_DIM);
+          // CLI: unmount our manual mount and log out (typed ahead).
+          if (cli) hidCliCleanup(mounted, weLoggedIn);
+          hidWipePass();
           // Handshake BEFORE ejecting: with piConnected set, mscEject()
           // asks the daemon to sync + unmount RIGSETUP (CMD:MSC_EJECT)
           // instead of pulling the media while the Pi still has it
           // mounted ("unable to read inode block" in dmesg).
           // Give the newly started daemon time to open the ACM port.
           delay(3000);
-          while (Serial.available()) Serial.read();  // flush stale bytes
+          hidFlushRx();                              // flush stale bytes
           Serial.println("HELLO");
           uint32_t tHello = millis();
           while (!piConnected && millis() - tHello < 5000) {
@@ -302,6 +495,8 @@ void hidInstallOnPi() {
           snprintf(errBuf, sizeof(errBuf), "%.20s", rxLine.c_str() + 4);
           hidSetStatus(0, "ERR: install", COL_ERR);
           hidSetStatus(1, errBuf,         COL_ERR);
+          if (cli) hidCliCleanup(mounted, weLoggedIn);
+          hidWipePass();
           mscEject();
           return;
         }
@@ -313,6 +508,8 @@ void hidInstallOnPi() {
     delay(50);
   }
 
+  if (cli) hidCliCleanup(mounted, weLoggedIn);
+  hidWipePass();
   mscEject();
   hidSetStatus(0, "Timeout!", COL_ERR);
   hidSetStatus(1, "Check Pi screen", COL_ERR);

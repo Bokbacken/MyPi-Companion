@@ -1,6 +1,6 @@
 # MyPi-Companion (HMS Rig Console) — Project Status
 
-_Last updated: October 2026 — current firmware: **v5**_
+_Last updated: October 2026 — current firmware: **v6 (in progress)**, last release tag `v5`_
 
 > **v4 is locked.** It is preserved as git tag `v4` (commit `a282ba8`).
 > All new work happens in `HMS_RigConsole_v6/` on feature branches.
@@ -154,7 +154,8 @@ STATE_SCAN       — Wi-Fi scan results
 | GET | `/connect` | Connect Pi to a named profile |
 | GET | `/status` | JSON: Pi + ESP status (`ssid` = real SSID, `conn` = NM connection) |
 | POST | `/addwifi` | Add Pi profile via USB serial |
-| POST | `/api/installonpi` | Trigger HID install on the Pi |
+| POST | `/api/installonpi` | Trigger HID install on the Pi. **v6:** optional `mode=desktop\|cli`, `user`, `pass` (CLI, RAM only), `layout=-1..4` (-1 = auto). 409 if an install is already pending. No params = v5 behavior |
+| GET | `/api/installcfg` | **v6:** saved install settings `{mode, layout, user}` (never the password) |
 | GET | `/profiles` | NVS profile manager |
 | GET | `/api/nvs` | NVS slots JSON |
 | GET | `/api/piprofiles` | Pi-side profile list |
@@ -220,7 +221,12 @@ TERM:OUT:<b64>           — terminal output
 RIG:INSTALL_START / RIG:INSTALL_DEPS / RIG:INSTALL_DAEMON / RIG:INSTALL_SERVICE
 RIG:INSTALL_DONE         — ESP ejects MSC, waits 3 s, sends HELLO (auto-connect)
 RIG:INSTALL_ERR_NOROOT / RIG:INSTALL_ERR_COPY / RIG:INSTALL_ERR_SERVICE
+RIG:INSTALL_ERR_DEPS     — v6: pyserial could not be installed (pip, apt and wheel unzip failed)
 ```
+
+CLI mode (v6) also uses these one-shot replies, echoed by commands the ESP types:
+`RIGPING:.:<port>` (shell reached + layout check), `ACMOK:<n>` (port probe),
+`SUDOOK` (sudo authenticated), `MNTOK` (RIGSETUP mounted at `/mnt/rigsetup`).
 
 Polling: `POLL_INTERVAL_MS = 5000`; `PI_TIMEOUT_MS = 15000` → `piConnected = false`.
 
@@ -338,3 +344,13 @@ commit both. The script asserts: no FitAddon, `termFit` present, vertical QB pre
 - [ ] Test Install on Pi with RIGSETUP built from `/rigsetup/` on hardware
 - [ ] Verify `STATUS:CONN` / SSID display on hardware
 - [ ] Verify submenu handling in `macros_html.h` (`mkEntry()`)
+
+## v6 status
+
+- [x] Sketch folder renamed to `HMS_RigConsole_v6/`, version strings v6
+- [x] v6.1 CLI/headless install mode (console login, sudo, mount by label, logout)
+- [x] Install settings in NVS `rigcfg` (`instMode`, `instLayout`, `instUser`); password RAM-only
+- [x] `install.sh` wheel-unzip fallback for Raspberry Pi OS Lite (no pip)
+- [x] Compiles with arduino-cli
+- [ ] Test CLI install on a fresh Raspberry Pi OS Lite (64-bit) on hardware
+- [ ] Re-test Desktop install (regression)
