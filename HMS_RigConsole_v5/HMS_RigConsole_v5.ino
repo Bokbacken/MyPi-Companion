@@ -380,6 +380,7 @@ void setup() {
 void loop() {
   handleTouch();
   handleSerial();
+  mscLoop();   // host-initiated MSC eject (SCSI START STOP UNIT)
 
   // Web server: active in AP mode AND/OR when ESP is in STA mode
   if (currentState == STATE_AP_ACTIVE || espConnected) {

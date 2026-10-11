@@ -202,6 +202,10 @@ void processMsg(const String& msg) {
     return;
   }
 
+  // OK:MSC_EJECT / ERR:MSC_EJECT:<reason> — Pi flushed + unmounted the MSC volume
+  if (msg == "OK:MSC_EJECT")          { mscOnHostEjectReply(true, "");               return; }
+  if (msg.startsWith("ERR:MSC_EJECT")) { mscOnHostEjectReply(false, msg.substring(14)); return; }
+
   // TERM:OUT:<base64> — PTY output from Pi → WebSocket client
   if (msg.startsWith("TERM:OUT:")) {
     if (termWsClient >= 0) {

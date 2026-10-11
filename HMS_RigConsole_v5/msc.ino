@@ -103,6 +103,63 @@ static int32_t on_msc_write(uint32_t lba, uint32_t offset,
   return -1;
 }
 
+// ── Graceful eject ────────────────────────────────────────────
+//
+//  Pulling the media while the host still has the volume mounted
+//  loses its dirty page cache ("lost sync page write").  Two paths
+//  make removal clean:
+//
+//  1. ESP-initiated (Stop sharing, switch backend):
+//     _mscDetach() sends CMD:MSC_EJECT to the Pi daemon, which runs
+//     sync + unmount and answers OK:MSC_EJECT (or ERR:MSC_EJECT:<why>).
+//     We pump the serial port until the reply arrives or the timeout
+//     expires, and only then hide the media.  Skipped if the daemon
+//     is not connected.
+//
+//  2. Host-initiated (Eject in the Pi file manager / `eject`):
+//     the host sends SCSI START STOP UNIT (load_eject, !start); the
+//     callback flags it and mscLoop() tears the backend down — the
+//     host has already unmounted, so no request is sent.
+
+#define MSC_EJECT_TIMEOUT_MS 10000u
+
+static volatile bool _mscEjectAck    = false;  // set by protocol.ino
+static volatile bool _mscHostEjected = false;  // set from TinyUSB task
+
+void mscOnHostEjectReply(bool ok, const String &why) {
+  if (!ok) Serial.printf("msc: Pi eject reported error: %s\n", why.c_str());
+  _mscEjectAck = true;
+}
+
+static bool on_msc_start_stop(uint8_t power_condition, bool start, bool load_eject) {
+  (void)power_condition;
+  if (load_eject && !start && msc_backend != MSC_BACKEND_NONE) _mscHostEjected = true;
+  return true;
+}
+
+// Ask the Pi to flush and unmount the volume.  Returns true on reply.
+static bool _mscRequestHostEject() {
+  if (!piConnected) return false;
+  _mscEjectAck = false;
+  Serial.println("CMD:MSC_EJECT");
+  uint32_t t0 = millis();
+  while (millis() - t0 < MSC_EJECT_TIMEOUT_MS) {
+    handleSerial();                 // dispatches OK/ERR:MSC_EJECT
+    if (_mscEjectAck) return true;
+    delay(10);
+  }
+  Serial.println("msc: no eject reply from Pi — removing media anyway");
+  return false;
+}
+
+// Called from loop(): handle an eject requested by the host.
+void mscLoop() {
+  if (!_mscHostEjected) return;
+  if (msc_backend == MSC_BACKEND_SD) sdShareStop();   // also remounts SD for the ESP
+  else if (msc_backend != MSC_BACKEND_NONE) mscSetBackendNone();
+  _mscHostEjected = false;
+}
+
 // ── Backend switching ─────────────────────────────────────────
 
 // Hide the media; if another medium was visible, give the host a
@@ -110,6 +167,7 @@ static int32_t on_msc_write(uint32_t lba, uint32_t offset,
 // new medium (possibly of a different size) appears.
 static void _mscDetach(bool willReattach) {
   bool wasActive = (msc_backend != MSC_BACKEND_NONE);
+  if (wasActive && !_mscHostEjected) _mscRequestHostEject();
   MSC.mediaPresent(false);
   msc_backend = MSC_BACKEND_NONE;
   if (wasActive && willReattach) delay(1500);
@@ -173,6 +231,7 @@ void mscBegin() {
   MSC.productRevision("1.0");
   MSC.onRead(on_msc_read);
   MSC.onWrite(on_msc_write);
+  MSC.onStartStop(on_msc_start_stop);
   // onFlush() does not exist in ESP32 core 3.x — omitted.
   MSC.mediaPresent(false);   // no media until a backend is selected
   MSC.begin(MSC_RIGSETUP_BYTES / MSC_SECTOR, MSC_SECTOR);  // real size set per backend
