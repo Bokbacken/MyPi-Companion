@@ -130,6 +130,9 @@ html,body{width:100%;height:100%;background:#111;color:#ccc;font-family:sans-ser
       <div class="dd-sep"></div>
       <div class="dd-item" onclick="window.open('/macros','_blank')">&#9998; Edit macros &amp; menus&hellip;</div>
       <div class="dd-sep"></div>
+      <div class="dd-item" id="sd-share-item" onclick="sdShareToggle()">&#128190; SD Share: <span id="sd-share-st">&hellip;</span></div>
+      <div class="dd-item" onclick="window.open('/storage','_blank')">&#128451; Storage &rarr;</div>
+      <div class="dd-sep"></div>
       <div class="dd-item" onclick="doClear()">&#10006; Clear</div>
       <div class="dd-item" onclick="doReconnect()">&#8635; Reconnect</div>
     </div>
@@ -578,7 +581,10 @@ function toggleMenu(btn) {
   const dd   = wrap.querySelector('.dropdown');
   const isOpen = dd.classList.contains('show');
   closeAllMenus();
-  if (!isOpen) { dd.classList.add('show'); btn.classList.add('open'); }
+  if (!isOpen) {
+    dd.classList.add('show'); btn.classList.add('open');
+    if (dd.querySelector('#sd-share-st')) sdShareRefresh();
+  }
 }
 
 function closeAllMenus() {
@@ -642,6 +648,28 @@ function fontDec() {
   closeAllMenus(); fontSize = Math.max(fontSize-1, 8);
   localStorage.setItem('fontSize', fontSize);
   term.options.fontSize = fontSize; termFit();
+}
+
+// SD Share — expose the SD card to the Pi as a USB drive
+let sdSharing = false;
+async function sdShareRefresh() {
+  const st = document.getElementById('sd-share-st');
+  try {
+    const j = await (await fetch('/api/sd/status')).json();
+    sdSharing = !!j.sharing;
+    st.textContent = !j.sdPresent ? 'no card' : (sdSharing ? 'ON' : 'OFF');
+  } catch (e) { st.textContent = '?'; }
+}
+
+async function sdShareToggle() {
+  closeAllMenus();
+  const url = sdSharing ? '/api/sd/share/stop' : '/api/sd/share/start';
+  try {
+    const r = await fetch(url, {method:'POST'});
+    const t = await r.text();
+    showToast(r.ok ? (sdSharing ? 'SD Share stopped' : 'SD Share started') : ('SD Share: ' + t), 3000);
+  } catch (e) { showToast('SD Share: request failed', 3000); }
+  sdShareRefresh();
 }
 
 function doClear() { closeAllMenus(); term.clear(); }

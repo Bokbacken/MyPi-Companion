@@ -3,7 +3,7 @@
 #
 # Settings mirror Arduino IDE -> Tools:
 #   Board ESP32S3 Dev Module, USB Mode USB-OTG (TinyUSB), USB CDC On Boot Enabled,
-#   PSRAM OPI PSRAM, Flash Size 16MB, Partition "16M Flash (2MB APP/12.5MB FATFS)"
+#   PSRAM OPI PSRAM, Flash Size 16MB, Partition "16M Flash (3MB APP/9.9MB FATFS)"
 name: Build firmware
 
 on:
@@ -13,7 +13,7 @@ on:
 
 env:
   SKETCH: HMS_RigConsole_v5
-  FQBN: esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=cdc,PSRAM=opi,FlashSize=16M,PartitionScheme=fatflash
+  FQBN: esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=cdc,PSRAM=opi,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB
   ESP32_CORE_VERSION: "3.3.12"
   ESP32_INDEX_URL: https://espressif.github.io/arduino-esp32/package_esp32_index.json
 
