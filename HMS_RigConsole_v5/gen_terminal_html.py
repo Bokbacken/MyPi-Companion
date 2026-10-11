@@ -241,6 +241,27 @@ function termFit() {
 }
 
 // ================================================================
+//  Clipboard helpers (copy works on both HTTP and HTTPS)
+// ================================================================
+function _clipCopy(text) {
+  if (!text) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).catch(() => _clipCopyExec(text));
+  } else {
+    _clipCopyExec(text);
+  }
+}
+function _clipCopyExec(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none;top:0;left:0;width:1px;height:1px';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  try { document.execCommand('copy'); } catch (_) {}
+  document.body.removeChild(ta);
+  term.focus();
+}
+
+// ================================================================
 //  Terminal init
 // ================================================================
 function initTerm() {
@@ -254,14 +275,38 @@ function initTerm() {
   });
   term.open(document.getElementById('term'));
   requestAnimationFrame(() => { termFit(); term.focus(); });
-  // Ctrl+Up / Ctrl+Down: browse local command history
   term.attachCustomKeyEventHandler(ev => {
-    if (ev.type === 'keydown' && ev.ctrlKey && !ev.altKey && !ev.shiftKey &&
+    if (ev.type !== 'keydown') return true;
+    const ctrl = ev.ctrlKey && !ev.altKey;
+
+    // Ctrl+Up / Ctrl+Down: browse local command history
+    if (ctrl && !ev.shiftKey &&
         (ev.key === 'ArrowUp' || ev.key === 'ArrowDown')) {
       ev.preventDefault();
       histNav(ev.key === 'ArrowUp' ? -1 : 1);
       return false;
     }
+
+    // Ctrl+C: copy selection if any, else send SIGINT (\x03)
+    if (ctrl && !ev.shiftKey && ev.key === 'c') {
+      const sel = term.getSelection();
+      if (sel) { _clipCopy(sel); term.clearSelection(); return false; }
+      return true;  // no selection → xterm sends \x03 (SIGINT)
+    }
+
+    // Ctrl+Shift+C: always copy selection (Linux/Windows terminal convention)
+    if (ctrl && ev.shiftKey && ev.key === 'C') {
+      const sel = term.getSelection(); if (sel) _clipCopy(sel);
+      return false;  // never send to shell
+    }
+
+    // Ctrl+V / Ctrl+Shift+V: return false so xterm skips preventDefault,
+    // which lets the browser fire the native paste event on xterm's hidden
+    // textarea → xterm's own handlePasteEvent picks it up → onData → wsSendText
+    if (ctrl && (ev.key === 'v' || (ev.shiftKey && ev.key === 'V'))) {
+      return false;
+    }
+
     return true;
   });
   term.onData(d => { histTrack(d); wsSendText(d); });
