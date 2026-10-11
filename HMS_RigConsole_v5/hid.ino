@@ -281,14 +281,20 @@ void hidInstallOnPi() {
         else if (rxLine == "RIG:INSTALL_DONE") {
           hidSetStatus(0, "Done!",         COL_ACTIVE);
           hidSetStatus(1, "Connecting...", COL_DIM);
-          mscEject();
-          // Give the USB device time to re-enumerate and the newly
-          // started daemon time to open the ACM port before we send
-          // HELLO.  The main loop's handleSerial() picks up the ACK
-          // and sets piConnected = true without any extra logic here.
+          // Handshake BEFORE ejecting: with piConnected set, mscEject()
+          // asks the daemon to sync + unmount RIGSETUP (CMD:MSC_EJECT)
+          // instead of pulling the media while the Pi still has it
+          // mounted ("unable to read inode block" in dmesg).
+          // Give the newly started daemon time to open the ACM port.
           delay(3000);
           while (Serial.available()) Serial.read();  // flush stale bytes
           Serial.println("HELLO");
+          uint32_t tHello = millis();
+          while (!piConnected && millis() - tHello < 5000) {
+            handleSerial();                          // picks up ACK
+            delay(20);
+          }
+          mscEject();   // graceful if connected, plain removal otherwise
           return;
         }
         else if (rxLine.startsWith("RIG:INSTALL_ERR")) {
