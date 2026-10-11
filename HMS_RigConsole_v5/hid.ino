@@ -165,13 +165,15 @@ void hidInstallOnPi() {
     // Broadcast find result to all possible ACM ports.
     // Echoing directly to each ACM port is safe: if the port does not
     // exist or we lack permission, 2>/dev/null suppresses the error.
+    // NOTE: bash applies redirections left to right, so 2>/dev/null
+    // must come BEFORE "> $P" or the open error still reaches the tty.
     // The ".:" in the reply also proves "." is typed correctly
     // (needed later for install.sh).
     hidCancelLine();
     hidTypeLayout(idx,
       "for D in $(find /media /run/media -maxdepth 3 -name RIGSETUP -type d 2>/dev/null);"
       " do for P in /dev/ttyACM0 /dev/ttyACM1 /dev/ttyACM2 /dev/ttyACM3;"
-      " do echo RIGSETUP:.:$D > $P 2>/dev/null; done; break; done"
+      " do echo RIGSETUP:.:$D 2>/dev/null > $P; done; break; done"
     );
 
     // Read Serial for up to 1500 ms.
@@ -223,7 +225,7 @@ void hidInstallOnPi() {
     while (Serial.available()) Serial.read();  // flush
 
     String cmd = "stty -F " + port + " -hupcl 2>/dev/null; "
-               + "echo ACMOK:" + String(i) + " > " + port + " 2>/dev/null";
+               + "echo ACMOK:" + String(i) + " 2>/dev/null > " + port;
     hidType(cmd.c_str());
 
     unsigned long t0 = millis();
