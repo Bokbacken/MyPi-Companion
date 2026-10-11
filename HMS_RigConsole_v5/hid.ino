@@ -279,9 +279,16 @@ void hidInstallOnPi() {
         else if (rxLine == "RIG:INSTALL_DAEMON")  hidSetStatus(0, "Copying daemon", COL_DIM);
         else if (rxLine == "RIG:INSTALL_SERVICE") hidSetStatus(0, "Setup service",  COL_DIM);
         else if (rxLine == "RIG:INSTALL_DONE") {
-          hidSetStatus(0, "Done!",      COL_ACTIVE);
-          hidSetStatus(1, "Reboot Pi", COL_ACTIVE);
+          hidSetStatus(0, "Done!",         COL_ACTIVE);
+          hidSetStatus(1, "Connecting...", COL_DIM);
           mscEject();
+          // Give the USB device time to re-enumerate and the newly
+          // started daemon time to open the ACM port before we send
+          // HELLO.  The main loop's handleSerial() picks up the ACK
+          // and sets piConnected = true without any extra logic here.
+          delay(3000);
+          while (Serial.available()) Serial.read();  // flush stale bytes
+          Serial.println("HELLO");
           return;
         }
         else if (rxLine.startsWith("RIG:INSTALL_ERR")) {
