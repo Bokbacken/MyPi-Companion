@@ -303,7 +303,7 @@ function wsConnect() {
 // ================================================================
 async function loadMacroPool() {
   try {
-    const r = await fetch('/files/macros.json');
+    const r = await fetch('/files/config/macros.json');
     if (r.ok) macroPool = await r.json();
     else macroPool = { macros: [], nextId: 1 };
   } catch { macroPool = { macros: [], nextId: 1 }; }
@@ -312,7 +312,7 @@ async function loadMacroPool() {
 
 async function saveMacroPool() {
   const blob = new Blob([JSON.stringify(macroPool)], {type:'application/json'});
-  const fd = new FormData(); fd.append('file', blob, 'macros.json');
+  const fd = new FormData(); fd.append('file', blob, 'config/macros.json');
   const r = await fetch('/upload', {method:'POST', body:fd});
   showToast(r.ok ? 'macros.json saved' : 'Save failed', 2500);
 }
@@ -391,7 +391,7 @@ function deleteMacro(id) {
 // ================================================================
 async function loadMenuConf() {
   try {
-    const r = await fetch('/files/menus.json');
+    const r = await fetch('/files/config/menus.json');
     if (r.ok) menuConf = await r.json();
     else menuConf = { menus: [], nextId: 1 };
   } catch { menuConf = { menus: [], nextId: 1 }; }
@@ -400,7 +400,7 @@ async function loadMenuConf() {
 
 async function saveMenuConf() {
   const blob = new Blob([JSON.stringify(menuConf)], {type:'application/json'});
-  const fd = new FormData(); fd.append('file', blob, 'menus.json');
+  const fd = new FormData(); fd.append('file', blob, 'config/menus.json');
   const r = await fetch('/upload', {method:'POST', body:fd});
   showToast(r.ok ? 'menus.json saved' : 'Save failed', 2500);
   if (r.ok) buildMenuBar();

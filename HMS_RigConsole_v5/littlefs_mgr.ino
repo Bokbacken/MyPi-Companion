@@ -13,6 +13,10 @@
 //  Files are served via onNotFound() → handleFileServe():
 //    GET  /files/<name>   — stream a file from FFat
 //
+//  Convention: config JSON files live under /config/ on FFat
+//  (/config/macros.json, /config/menus.json).  Legacy root-level
+//  copies are migrated once at boot by littleFsBegin().
+//
 //  `server` is declared in HMS_RigConsole_v4.ino and visible here
 //  because Arduino merges all .ino files into one compilation unit.
 // ============================================================
@@ -35,6 +39,32 @@ static String _fsJsonEsc(const String &s) {
   return out;
 }
 
+// Copy src → dst in 512-byte chunks, then remove src.
+// Only runs if src exists and dst does not.  On a failed copy the
+// partial dst is removed and src is kept.
+static void _fsMigrate(const char *src, const char *dst) {
+  if (!FFat.exists(src) || FFat.exists(dst)) return;
+
+  File in  = FFat.open(src, "r");
+  File out = FFat.open(dst, "w");
+  bool ok  = in && out;
+  uint8_t buf[512];
+  while (ok && in.available()) {
+    size_t n = in.read(buf, sizeof(buf));
+    if (n == 0 || out.write(buf, n) != n) ok = false;
+  }
+  if (in)  in.close();
+  if (out) out.close();
+
+  if (ok) {
+    FFat.remove(src);
+    Serial.printf("FFat: migrated %s -> %s\n", src, dst);
+  } else {
+    FFat.remove(dst);
+    Serial.printf("ERR: FFat migration failed %s -> %s\n", src, dst);
+  }
+}
+
 // ============================================================
 //  littleFsBegin()  — called once from setup()
 //  (name kept so HMS_RigConsole_v4.ino needs no further change)
@@ -49,11 +79,49 @@ void littleFsBegin() {
   _fatOk = true;
   Serial.printf("FFat OK  total:%u B  used:%u B\n",
                 FFat.totalBytes(), FFat.usedBytes());
+
+  // All config JSON files live under /config/ (mkdir is a no-op if it exists)
+  if (!FFat.exists("/config")) FFat.mkdir("/config");
+
+  // Migrate legacy root-level config files to /config/ (one-time, after OTA)
+  _fsMigrate("/macros.json", "/config/macros.json");
+  _fsMigrate("/menus.json",  "/config/menus.json");
 }
 
 // ============================================================
 //  GET /api/files — JSON array [{name, size}, …]
+//  Files in subdirectories are listed as "dir/name" (e.g.
+//  "config/macros.json"), which is also the path used by
+//  /files/<name> and /api/files/del.
 // ============================================================
+static void _fsListDir(const String &dirPath, const String &prefix,
+                       String &json, bool &first, int depth) {
+  File dir = FFat.open(dirPath);
+  if (!dir || !dir.isDirectory()) return;
+
+  File f = dir.openNextFile();
+  while (f) {
+    String name = f.name();
+    int sl = name.lastIndexOf('/');          // some cores return full path
+    if (sl >= 0) name = name.substring(sl + 1);
+
+    if (f.isDirectory()) {
+      if (depth > 0) {
+        String sub = (dirPath == "/" ? "/" : dirPath + "/") + name;
+        _fsListDir(sub, prefix + name + "/", json, first, depth - 1);
+      }
+    } else {
+      if (!first) json += ",";
+      first = false;
+      json += "{\"name\":\"" + _fsJsonEsc(prefix + name) +
+              "\",\"size\":"  + String(f.size()) + "}";
+    }
+    f.close();
+    f = dir.openNextFile();
+  }
+  dir.close();
+}
+
 void handleApiFilesList() {
   if (!_fatOk) {
     server.send(503, "application/json", "[]");
@@ -62,25 +130,7 @@ void handleApiFilesList() {
 
   String json = "[";
   bool   first = true;
-
-  File root = FFat.open("/");
-  if (root && root.isDirectory()) {
-    File f = root.openNextFile();
-    while (f) {
-      if (!f.isDirectory()) {
-        if (!first) json += ",";
-        first = false;
-
-        String name = f.name();
-        if (name.startsWith("/")) name = name.substring(1);
-
-        json += "{\"name\":\"" + _fsJsonEsc(name) +
-                "\",\"size\":"  + String(f.size()) + "}";
-      }
-      f = root.openNextFile();
-    }
-    root.close();
-  }
+  _fsListDir("/", "", json, first, 1);   // root + one level of subdirs
   json += "]";
 
   server.sendHeader("Cache-Control", "no-cache");
@@ -172,14 +222,27 @@ void handleFileUpload() {
     }
 
     String name = upload.filename;
-    // Strip directory component and replace spaces
+    // Keep a single safe directory prefix (e.g. "config/macros.json");
+    // anything else is reduced to the base filename.  Replace spaces.
     {
+      name.replace('\\', '/');
+      while (name.startsWith("/")) name = name.substring(1);
+      String dir;
       int sl = name.lastIndexOf('/');
-      if (sl >= 0) name = name.substring(sl + 1);
+      if (sl >= 0) {
+        dir  = name.substring(0, sl);
+        name = name.substring(sl + 1);
+        if (dir.indexOf('/') >= 0 || dir.indexOf("..") >= 0 || dir == ".")
+          dir = "";
+      }
       for (unsigned int i = 0; i < name.length(); i++)
         if (name[i] == ' ') name[i] = '_';
+      if (name.isEmpty()) name = "upload.bin";
+      if (dir.length()) {
+        if (!FFat.exists("/" + dir)) FFat.mkdir("/" + dir);
+        name = dir + "/" + name;
+      }
     }
-    if (name.isEmpty()) name = "upload.bin";
 
     _upPath = "/" + name;
     Serial.printf("FAT UPLOAD START: %s\n", _upPath.c_str());

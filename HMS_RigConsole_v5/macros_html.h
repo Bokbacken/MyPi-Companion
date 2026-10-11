@@ -3,8 +3,8 @@
 //  Served at GET /macros
 //
 //  Data files on FFat (compatible with v4 terminal format):
-//    /files/macros.json — { macros:[{id,name,cmd,cr}], nextId:N }
-//    /files/menus.json  — { menus:[{id,label,entries:[...]}], nextId:N }
+//    /files/config/macros.json — { macros:[{id,name,cmd,cr}], nextId:N }
+//    /files/config/menus.json  — { menus:[{id,label,entries:[...]}], nextId:N }
 //        entry types:
 //          { type:"macro",   ref:<macroId> }
 //          { type:"sep" }
@@ -331,14 +331,14 @@ window.addEventListener('load', async function() {
 
 async function loadMacros() {
   try {
-    var r = await fetch('/files/macros.json');
+    var r = await fetch('/files/config/macros.json');
     if (r.ok) MP = await r.json();
   } catch(e) {}
 }
 
 async function loadMenus() {
   try {
-    var r = await fetch('/files/menus.json');
+    var r = await fetch('/files/config/menus.json');
     if (r.ok) MC = await r.json();
   } catch(e) {}
 }
@@ -359,8 +359,8 @@ async function loadQB() {
 async function saveAll() {
   st('Sparar…');
   document.getElementById('savebtn').disabled = true;
-  var ok = await uploadJson('macros.json', MP)
-        && await uploadJson('menus.json',  MC);
+  var ok = await uploadJson('config/macros.json', MP)
+        && await uploadJson('config/menus.json',  MC);
   document.getElementById('savebtn').disabled = false;
   dirty = false;
   st(ok ? '✓ Sparat ' + new Date().toLocaleTimeString('sv') : '✗ Fel vid sparning!', !ok);
