@@ -130,7 +130,8 @@ Tools menu:
 Every push and pull request is compiled by `.github/workflows/build.yml` with the
 settings above. To download the firmware: **Actions** → latest *Build firmware* run →
 **Artifacts** → `firmware-<sha>` (zip containing the `.bin` files).
-The build also fails if `terminal_html.h` is out of date with `gen_terminal_html.py`.
+The build also fails if `terminal_html.h` is out of date with `gen_terminal_html.py`,
+or if `msc_image.h` is out of date with the files in `pi/`.
 
 ## Generated files
 
