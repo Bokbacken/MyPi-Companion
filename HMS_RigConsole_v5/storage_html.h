@@ -326,6 +326,11 @@ treeEl.addEventListener('drop', e=>{
 
 sdRefresh(); rsRefresh(); refresh();
 setInterval(()=>{ sdRefresh(); rsRefresh(); }, 5000);
+setInterval(()=>{ refresh(); }, 15000);   // keep file listing reasonably fresh
+// Refresh immediately when the user switches back to this tab
+document.addEventListener('visibilitychange', ()=>{
+  if (!document.hidden) { refresh(); sdRefresh(); rsRefresh(); }
+});
 </script>
 </body>
 </html>
