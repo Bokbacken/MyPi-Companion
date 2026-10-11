@@ -76,7 +76,9 @@ void handleConnect() {
 
 void handleStatus() {
   String json = "{\"ssid\":\"";
-  json += activeSSID;
+  json += activeSSID;          // actual Wi-Fi SSID
+  json += "\",\"conn\":\"";
+  json += activeConn;          // NM connection name
   json += "\",\"ip\":\"";
   json += activeIP;
   json += "\",\"pi\":";
@@ -100,6 +102,7 @@ void handleApiInfo() {
   json += ",\"free_sketch\":"; json += ESP.getFreeSketchSpace();
   json += ",\"pi_connected\":"; json += piConnected ? "true" : "false";
   json += ",\"pi_ssid\":\"";   json += activeSSID; json += "\"";
+  json += ",\"pi_conn\":\"";  json += activeConn; json += "\"";
   json += ",\"pi_ip\":\"";     json += activeIP;   json += "\"";
   json += ",\"usb_port\":\"";  json += piPort;     json += "\"";
   json += ",\"esp_connected\":"; json += espConnected ? "true" : "false";
