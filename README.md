@@ -74,8 +74,8 @@ It can even install its own Pi-side helper software over USB — no internet, no
 
 ```
 MyPi-Companion/
-├── HMS_RigConsole_v5/        Arduino sketch folder (open the .ino in Arduino IDE)
-│   ├── HMS_RigConsole_v5.ino
+├── HMS_RigConsole_v6/        Arduino sketch folder (open the .ino in Arduino IDE)
+│   ├── HMS_RigConsole_v6.ino
 │   ├── gen_terminal_html.py  generator for terminal_html.h
 │   ├── rigsetup_files.h      generated from pi/ by tools/gen_rigsetup_h.py
 │   └── ...
@@ -115,14 +115,14 @@ Tools menu:
 | Flash Size | **16MB (128Mb)** |
 | Partition Scheme | **16M Flash (2MB APP/12.5MB FATFS)** |
 
-1. Open `HMS_RigConsole_v5/HMS_RigConsole_v5.ino`, set the Tools menu as above.
+1. Open `HMS_RigConsole_v6/HMS_RigConsole_v6.ino`, set the Tools menu as above.
 2. Compile & upload over USB.
 3. Later updates can be flashed from the web page `/update` (OTA) using the
    `.bin` from the CI build or from *Sketch → Export Compiled Binary*.
 
 > **The first v5 flash must be done over USB.** v5 changes the partition table
 > (the old `partitions.csv` was removed) and OTA cannot change the partition table.
-> Use `HMS_RigConsole_v5.ino.bin` for OTA — never `*.merged.bin` (that is a full
+> Use `HMS_RigConsole_v6.ino.bin` for OTA — never `*.merged.bin` (that is a full
 > flash image for USB/esptool at address 0x0).
 
 ## Automatic build (GitHub Actions)
@@ -139,7 +139,7 @@ or if `rigsetup_files.h` is out of date with the files in `pi/`.
 and run:
 
 ```bash
-cd HMS_RigConsole_v5
+cd HMS_RigConsole_v6
 python3 gen_terminal_html.py
 ```
 
@@ -202,7 +202,7 @@ Read this section plus [`docs/GUIDELINES.md`](docs/GUIDELINES.md) and
   stop the web server only with `webServerStop()`; no `partitions.csv` in the sketch folder;
   `Serial.setRxBufferSize(4096)` before `Serial.begin()`.
 - **Flashing:** the first v5 flash must be over USB (partition table change); OTA uses
-  `HMS_RigConsole_v5.ino.bin`, never `*.merged.bin`.
+  `HMS_RigConsole_v6.ino.bin`, never `*.merged.bin`.
 - **Naming pitfall:** on the ESP32, `activeSSID` is the real Wi-Fi SSID (for display) and
   `activeConn` is the NetworkManager connection name (for matching and `CMD:CONNECT`).
   The Pi profile list (`PROFILES:` / `piProfiles[].ssid`) contains NM connection names,

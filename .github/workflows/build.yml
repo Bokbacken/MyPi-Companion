@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 env:
-  SKETCH: HMS_RigConsole_v5
+  SKETCH: HMS_RigConsole_v6
   FQBN: esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=cdc,PSRAM=opi,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB
   ESP32_CORE_VERSION: "3.3.12"
   ESP32_INDEX_URL: https://espressif.github.io/arduino-esp32/package_esp32_index.json

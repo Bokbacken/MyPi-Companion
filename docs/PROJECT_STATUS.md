@@ -3,7 +3,7 @@
 _Last updated: October 2026 — current firmware: **v5**_
 
 > **v4 is locked.** It is preserved as git tag `v4` (commit `a282ba8`).
-> All new work happens in `HMS_RigConsole_v5/` on feature branches.
+> All new work happens in `HMS_RigConsole_v6/` on feature branches.
 
 ---
 
@@ -34,10 +34,10 @@ xterm.js terminal. It enumerates as a USB composite device: CDC-ACM + HID keyboa
 
 ---
 
-## File layout (`HMS_RigConsole_v5/`)
+## File layout (`HMS_RigConsole_v6/`)
 
 ```
-HMS_RigConsole_v5.ino  — includes, globals, setup(), loop(), splash,
+HMS_RigConsole_v6.ino  — includes, globals, setup(), loop(), splash,
                          drawProgmemImage/Transp()
 config.h               — constants, pins, state enum, structs, MAX_NVS_SLOTS=10
 display.ino            — all draw*() functions, drawHeader, drawStatusBar
