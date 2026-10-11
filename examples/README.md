@@ -118,9 +118,9 @@
 ## Import Instructions
 
 1. Open `http://192.168.4.1/macros` in your browser
-2. Click **Import** (the Export/Import button, top right)
-3. Upload `example_macros.json` → imports the macro pool
-4. Upload `example_menus.json` → imports the menu structure
+2. Click **Import** (top right) and pick `example_macros.json` → imports the macro pool
+3. Click **Import** again and pick `example_menus.json` → imports the menu structure
+4. Click **Save all** (or Ctrl+S) — nothing is written to the ESP until you save
 5. Alternatively: upload the files directly via `/upload` and name them `macros.json` / `menus.json`
 
 > Note: If you already have your own `macros.json`/`menus.json` on the device, make a backup using

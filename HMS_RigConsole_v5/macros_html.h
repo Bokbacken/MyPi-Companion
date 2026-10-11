@@ -3,8 +3,8 @@
 //  Served at GET /macros
 //
 //  Data files on FFat (compatible with v4 terminal format):
-//    /files/macros.json — { macros:[{id,name,cmd,cr}], nextId:N }
-//    /files/menus.json  — { menus:[{id,label,entries:[...]}], nextId:N }
+//    /files/config/macros.json — { macros:[{id,name,cmd,cr}], nextId:N }
+//    /files/config/menus.json  — { menus:[{id,label,entries:[...]}], nextId:N }
 //        entry types:
 //          { type:"macro",   ref:<macroId> }
 //          { type:"sep" }
@@ -322,24 +322,25 @@ var dirty   = false;  // unsaved changes flag
 // ================================================================
 window.addEventListener('load', async function() {
   st('Laddar…');
+  // Load all data in parallel, then render once — avoids the race where
+  // rt() runs before MP is populated and macro refs resolve to '?'.
   await Promise.all([loadMacros(), loadMenus(), loadQB()]);
+  rl(); rt(); rqb();
   st('Redo');
 });
 
 async function loadMacros() {
   try {
-    var r = await fetch('/files/macros.json');
+    var r = await fetch('/files/config/macros.json');
     if (r.ok) MP = await r.json();
   } catch(e) {}
-  rl();
 }
 
 async function loadMenus() {
   try {
-    var r = await fetch('/files/menus.json');
+    var r = await fetch('/files/config/menus.json');
     if (r.ok) MC = await r.json();
   } catch(e) {}
-  rt();
 }
 
 async function loadQB() {
@@ -350,7 +351,6 @@ async function loadQB() {
       arr.forEach(function(x){ if(x.slot>=0&&x.slot<25) QB[x.slot]=x.macroid; });
     }
   } catch(e) {}
-  rqb();
 }
 
 // ================================================================
@@ -359,8 +359,8 @@ async function loadQB() {
 async function saveAll() {
   st('Sparar…');
   document.getElementById('savebtn').disabled = true;
-  var ok = await uploadJson('macros.json', MP)
-        && await uploadJson('menus.json',  MC);
+  var ok = await uploadJson('config/macros.json', MP)
+        && await uploadJson('config/menus.json',  MC);
   document.getElementById('savebtn').disabled = false;
   dirty = false;
   st(ok ? '✓ Sparat ' + new Date().toLocaleTimeString('sv') : '✗ Fel vid sparning!', !ok);
@@ -395,16 +395,29 @@ function doExport() {
   a.href = URL.createObjectURL(b); a.download = 'rig_macros_export.json'; a.click();
 }
 
+function fixNextId(obj, arr) {
+  var max = 0;
+  arr.forEach(function(x){ if (x.id > max) max = x.id; });
+  if (!(obj.nextId > max)) obj.nextId = max + 1;
+  return obj;
+}
+
 function doImport(e) {
   var file = e.target.files[0]; if (!file) return;
   var fr = new FileReader();
   fr.onload = function(ev) {
     try {
       var d = JSON.parse(ev.target.result);
-      if (d.macros_json) MP = d.macros_json;
-      if (d.menus_json)  MC = d.menus_json;
+      // Accepts the combined export ({macros_json, menus_json}) as well as
+      // a plain macros.json ({macros:[...]}) or menus.json ({menus:[...]}).
+      var mp = d.macros_json || (Array.isArray(d.macros) ? d : null);
+      var mc = d.menus_json  || (Array.isArray(d.menus)  ? d : null);
+      if (!mp && !mc) { toast('No macros or menus found in file!'); return; }
+      if (mp) MP = fixNextId(mp, mp.macros);
+      if (mc) MC = fixNextId(mc, mc.menus);
       rl(); rt(); rqb(); markDirty();
-      toast('JSON importerad — spara för att verkställa');
+      toast((mp && mc ? 'Macros + menus' : mp ? mp.macros.length + ' macros' : mc.menus.length + ' menus') +
+            ' imported — click Save to apply', 4000);
     } catch(err) { toast('Ogiltig JSON-fil!'); }
   };
   fr.readAsText(file); e.target.value = '';

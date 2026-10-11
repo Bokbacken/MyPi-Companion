@@ -1,7 +1,7 @@
 // ============================================================
 //  nvs_macros.ino — Quick Button NVS storage
 //
-//  The macro pool (macros.json) is stored on FFat and managed
+//  The macro pool (/config/macros.json) is stored on FFat and managed
 //  entirely client-side.  The ESP only needs to remember which
 //  macro ID is assigned to each of the 25 quick-button slots.
 //
@@ -15,7 +15,7 @@ int32_t quickBtnIds[25];
 
 // ------------------------------------------------------------
 //  loadMacros() — stub kept for compatibility with setup()
-//  The actual macro pool lives in macros.json on FFat and is
+//  The actual macro pool lives in /config/macros.json on FFat and is
 //  loaded by the browser, not by the ESP firmware.
 // ------------------------------------------------------------
 void loadMacros() {

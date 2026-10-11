@@ -31,11 +31,26 @@
 //    POST /api/files/del      — delete a LittleFS file  (field: name)
 //    POST /upload             — upload a file to LittleFS  (field: file)
 //    GET  /files/<name>       — serve a file from LittleFS (via onNotFound)
+//    GET  /storage            — Storage page (SD Share, RIGSETUP, file manager)
+//    GET  /api/sd/status      — {sharing,onAtBoot,sdPresent}
+//    POST /api/sd/share/start — expose SD card to the Pi over USB MSC
+//    POST /api/sd/share/stop  — stop SD Share
+//    POST /api/sd/boot        — enable SD Share on boot  (field: enable=0|1)
+//    GET  /api/storage/ffat   — recursive FFat listing [{name,path,size,dir}]
+//    GET  /api/storage/sd     — recursive SD listing   [{name,path,size,dir}]
+//    POST /api/storage/delete — delete file/dir  (fields: path, fs=ffat|sd)
+//    POST /api/storage/copy   — copy  (fields: srcPath, srcFs, dstPath, dstFs)
+//    POST /api/storage/upload — multipart upload  (query: fs, dir; field: file)
+//    GET  /api/storage/download — download a file (query: fs, path)
+//    POST /api/rigsetup/start — present RIGSETUP disk (built from /rigsetup/)
+//    POST /api/rigsetup/stop  — remove RIGSETUP disk
+//    GET  /api/rigsetup/status — {active,files:[{name,size}]}
 // ============================================================
 
 #include "hms_logo_web.h"   // HMS_LOGO_WEB_PNG / HMS_LOGO_WEB_PNG_LEN
 #include "page_html.h"   // PAGE_TMPL, NETWORKS_HTML, INSTALLPI_HTML, SYSINFO_HTML, OTA_HTML
 #include "macros_html.h" // MACROS_HTML — GUI macro/menu editor at /macros
+#include "storage_html.h" // STORAGE_HTML — storage page at /storage
 
 
 // ============================================================
@@ -338,6 +353,247 @@ static void handleSaveQuickBtn() {
 
 
 // ============================================================
+//  STORAGE / SD SHARE / RIGSETUP  API
+//
+//  Filesystem selector "fs": "ffat" (internal) or "sd" (SD card).
+//  SD file operations are refused while SD Share is active,
+//  because the Pi owns the card's filesystem at that time.
+//  POST parameters are form fields (URLSearchParams), like the
+//  rest of this server.
+// ============================================================
+
+// Resolve "ffat" / "sd" to a mounted filesystem, or send an error
+// response and return nullptr.
+static fs::FS *_stFs(const String &name) {
+  if (name == "ffat") {
+    if (!_fatOk) { server.send(503, "text/plain", "ERR: FFat not mounted"); return nullptr; }
+    return &FFat;
+  }
+  if (name == "sd") {
+    if (sdIsShareActive()) { server.send(409, "text/plain", "ERR: SD Share active — stop sharing first"); return nullptr; }
+    if (!sdMount()) { server.send(503, "text/plain", "ERR: no SD card"); return nullptr; }
+    return &SD_MMC;
+  }
+  server.send(400, "text/plain", "ERR: fs must be ffat or sd");
+  return nullptr;
+}
+
+// Absolute path without ".." components.
+static bool _stPathOk(const String &p) {
+  return p.length() > 1 && p[0] == '/' && p.indexOf("..") < 0;
+}
+
+static String _stBaseName(const String &p) {
+  int s = p.lastIndexOf('/');
+  return s >= 0 ? p.substring(s + 1) : p;
+}
+
+// Create all parent directories of path.
+static void _stMkParents(fs::FS &fs, const String &path) {
+  int pos = 1;
+  while ((pos = path.indexOf('/', pos)) > 0) {
+    String d = path.substring(0, pos);
+    if (!fs.exists(d)) fs.mkdir(d);
+    pos++;
+  }
+}
+
+static bool _stCopyFile(fs::FS &sfs, const String &src, fs::FS &dfs, const String &dst) {
+  File in = sfs.open(src, FILE_READ);
+  if (!in) return false;
+  _stMkParents(dfs, dst);
+  File out = dfs.open(dst, FILE_WRITE);
+  if (!out) { in.close(); return false; }
+  static uint8_t buf[4096];
+  bool ok = true;
+  while (in.available()) {
+    size_t n = in.read(buf, sizeof(buf));
+    if (n == 0) break;
+    if (out.write(buf, n) != n) { ok = false; break; }
+    yield();
+  }
+  in.close(); out.close();
+  if (!ok) dfs.remove(dst);
+  return ok;
+}
+
+static bool _stCopyRec(fs::FS &sfs, const String &src, fs::FS &dfs,
+                       const String &dst, int depth) {
+  File f = sfs.open(src);
+  if (!f) return false;
+  if (!f.isDirectory()) { f.close(); return _stCopyFile(sfs, src, dfs, dst); }
+  if (depth > 6) { f.close(); return false; }
+  _stMkParents(dfs, dst + "/");
+  bool ok = true;
+  for (File c = f.openNextFile(); c; c = f.openNextFile()) {
+    String name = _stBaseName(String(c.name()));
+    c.close();
+    if (!_stCopyRec(sfs, src + "/" + name, dfs, dst + "/" + name, depth + 1)) ok = false;
+  }
+  f.close();
+  return ok;
+}
+
+// ── SD Share ──────────────────────────────────────────────────
+static void handleSdStatus() {
+  String json = "{\"sharing\":";
+  json += sdIsShareActive() ? "true" : "false";
+  json += ",\"onAtBoot\":";  json += sdIsOnBoot()  ? "true" : "false";
+  json += ",\"sdPresent\":"; json += sdIsMounted() ? "true" : "false";
+  json += "}";
+  server.sendHeader("Cache-Control", "no-cache");
+  server.send(200, "application/json", json);
+}
+
+static void handleSdShareStart() {
+  if (sdShareStart()) server.send(200, "text/plain", "OK");
+  else                server.send(503, "text/plain", "ERR: no SD card");
+}
+
+static void handleSdShareStop() {
+  sdShareStop();
+  server.send(200, "text/plain", "OK");
+}
+
+static void handleSdBoot() {
+  if (!server.hasArg("enable")) { server.send(400, "text/plain", "ERR: missing enable"); return; }
+  String v = server.arg("enable");
+  sdSetOnBoot(v == "1" || v == "true");
+  server.send(200, "text/plain", "OK");
+}
+
+// ── File manager ──────────────────────────────────────────────
+static void _stSendList(const char *fsName) {
+  fs::FS *fs = _stFs(fsName);
+  if (!fs) return;
+  if (fs == &FFat && !FFat.exists("/rigsetup")) FFat.mkdir("/rigsetup");
+  String json = "[";
+  bool first = true;
+  sdListDir(*fs, "/", json, first);
+  json += "]";
+  server.sendHeader("Cache-Control", "no-cache");
+  server.send(200, "application/json", json);
+}
+
+static void handleStorageListFfat() { _stSendList("ffat"); }
+static void handleStorageListSd()   { _stSendList("sd"); }
+
+static void handleStorageDelete() {
+  String path = server.arg("path");
+  if (!_stPathOk(path)) { server.send(400, "text/plain", "ERR: bad path"); return; }
+  fs::FS *fs = _stFs(server.arg("fs"));
+  if (!fs) return;
+  bool ok = (fs == &SD_MMC) ? sdDeleteFile(path.c_str())
+                            : _fsRemoveRec(*fs, path, 0);
+  if (ok) server.send(200, "text/plain", "Deleted");
+  else    server.send(500, "text/plain", "ERR: delete failed");
+}
+
+static void handleStorageCopy() {
+  String src = server.arg("srcPath"), dst = server.arg("dstPath");
+  if (!_stPathOk(src) || !_stPathOk(dst)) { server.send(400, "text/plain", "ERR: bad path"); return; }
+  fs::FS *sfs = _stFs(server.arg("srcFs"));
+  if (!sfs) return;
+  fs::FS *dfs = _stFs(server.arg("dstFs"));
+  if (!dfs) return;
+  if (sfs == dfs && (dst == src || dst.startsWith(src + "/"))) {
+    server.send(400, "text/plain", "ERR: destination inside source"); return;
+  }
+  if (!sfs->exists(src)) { server.send(404, "text/plain", "ERR: source not found"); return; }
+  if (_stCopyRec(*sfs, src, *dfs, dst, 0)) server.send(200, "text/plain", "Copied");
+  else                                     server.send(500, "text/plain", "ERR: copy failed");
+}
+
+static File   _stUpFile;
+static fs::FS *_stUpFs = nullptr;
+static String _stUpPath;
+static bool   _stUpOk = false;
+
+static void handleStorageUpload() {
+  HTTPUpload &up = server.upload();
+  if (up.status == UPLOAD_FILE_START) {
+    _stUpOk = false;
+    _stUpFs = nullptr;
+    String fsName = server.arg("fs");
+    String dir    = server.hasArg("dir") ? server.arg("dir") : String("/");
+    if (!dir.startsWith("/") || dir.indexOf("..") >= 0) return;
+    if (!dir.endsWith("/")) dir += "/";
+    String name = _stBaseName(up.filename);
+    if (name.isEmpty()) return;
+    if (fsName == "ffat" && _fatOk) _stUpFs = &FFat;
+    else if (fsName == "sd" && !sdIsShareActive() && sdMount()) _stUpFs = &SD_MMC;
+    if (!_stUpFs) return;
+    _stUpPath = dir + name;
+    _stMkParents(*_stUpFs, _stUpPath);
+    _stUpFile = _stUpFs->open(_stUpPath, FILE_WRITE);
+    _stUpOk = (bool)_stUpFile;
+  } else if (up.status == UPLOAD_FILE_WRITE) {
+    if (_stUpOk && _stUpFile.write(up.buf, up.currentSize) != up.currentSize) _stUpOk = false;
+  } else if (up.status == UPLOAD_FILE_END) {
+    if (_stUpFile) _stUpFile.close();
+    if (!_stUpOk && _stUpFs) _stUpFs->remove(_stUpPath);
+  } else if (up.status == UPLOAD_FILE_ABORTED) {
+    if (_stUpFile) _stUpFile.close();
+    if (_stUpFs) _stUpFs->remove(_stUpPath);
+    _stUpOk = false;
+  }
+}
+
+static void handleStorageUploadDone() {
+  if (_stUpOk) server.send(200, "text/plain", String("Uploaded ") + _stUpPath);
+  else         server.send(500, "text/plain", "ERR: upload failed (bad fs/dir, no card, or SD Share active)");
+}
+
+static void handleStorageDownload() {
+  String path = server.arg("path");
+  if (!_stPathOk(path)) { server.send(400, "text/plain", "ERR: bad path"); return; }
+  fs::FS *fs = _stFs(server.arg("fs"));
+  if (!fs) return;
+  File f = fs->open(path, FILE_READ);
+  if (!f || f.isDirectory()) { server.send(404, "text/plain", "ERR: not found"); return; }
+  server.sendHeader("Content-Disposition",
+                    String("attachment; filename=\"") + _stBaseName(path) + "\"");
+  server.streamFile(f, "application/octet-stream");
+  f.close();
+}
+
+// ── RIGSETUP ──────────────────────────────────────────────────
+static void handleRigsetupStart() {
+  if (sdIsShareActive()) sdShareStop();
+  if (mscSetBackendRigsetup()) server.send(200, "text/plain", "OK");
+  else                         server.send(500, "text/plain", "ERR: RIGSETUP build failed");
+}
+
+static void handleRigsetupStop() {
+  if (mscBackendIsRigsetup()) mscSetBackendNone();
+  server.send(200, "text/plain", "OK");
+}
+
+static void handleRigsetupStatus() {
+  String json = "{\"active\":";
+  json += mscBackendIsRigsetup() ? "true" : "false";
+  json += ",\"files\":[";
+  bool first = true;
+  File dir = FFat.open("/rigsetup");
+  if (dir && dir.isDirectory()) {
+    for (File f = dir.openNextFile(); f; f = dir.openNextFile()) {
+      if (!f.isDirectory()) {
+        if (!first) json += ",";
+        first = false;
+        json += "{\"name\":\""; json += _sdJsonEsc(_stBaseName(String(f.name())));
+        json += "\",\"size\":"; json += (uint32_t)f.size(); json += "}";
+      }
+      f.close();
+    }
+  }
+  if (dir) dir.close();
+  json += "]}";
+  server.sendHeader("Cache-Control", "no-cache");
+  server.send(200, "application/json", json);
+}
+
+
+// ============================================================
 //  WEB SERVER  START / STOP
 // ============================================================
 static bool _webServerRunning = false;
@@ -396,6 +652,24 @@ void startWebServer() {
   server.on("/macros", HTTP_GET, []() {
     server.send_P(200, "text/html", MACROS_HTML);
   });
+
+  // ── Storage page + SD / storage / RIGSETUP API ─────────────
+  server.on("/storage", HTTP_GET, []() {
+    server.send_P(200, "text/html", STORAGE_HTML);
+  });
+  server.on("/api/sd/status",        HTTP_GET,  handleSdStatus);
+  server.on("/api/sd/share/start",   HTTP_POST, handleSdShareStart);
+  server.on("/api/sd/share/stop",    HTTP_POST, handleSdShareStop);
+  server.on("/api/sd/boot",          HTTP_POST, handleSdBoot);
+  server.on("/api/storage/ffat",     HTTP_GET,  handleStorageListFfat);
+  server.on("/api/storage/sd",       HTTP_GET,  handleStorageListSd);
+  server.on("/api/storage/delete",   HTTP_POST, handleStorageDelete);
+  server.on("/api/storage/copy",     HTTP_POST, handleStorageCopy);
+  server.on("/api/storage/upload",   HTTP_POST, handleStorageUploadDone, handleStorageUpload);
+  server.on("/api/storage/download", HTTP_GET,  handleStorageDownload);
+  server.on("/api/rigsetup/start",   HTTP_POST, handleRigsetupStart);
+  server.on("/api/rigsetup/stop",    HTTP_POST, handleRigsetupStop);
+  server.on("/api/rigsetup/status",  HTTP_GET,  handleRigsetupStatus);
 
   // ── OTA ────────────────────────────────────────────────────
   server.on("/update", HTTP_GET,  handleOtaPage);

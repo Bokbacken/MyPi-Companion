@@ -54,11 +54,13 @@ nvs_macros.ino         — Quick Button NVS storage: quickBtnIds[25],
 littlefs_mgr.ino       — FFat init + file HTTP handlers (name is historical)
 protocol.ino           — serial message parser, webSocketEvent() (xterm.js ↔ Pi bridge)
 hid.ino                — USB HID: hidBegin(), sendCtrlAltT(), typeString()
-msc.ino                — USB Mass Storage: exposes rig_daemon.py as a disk image
+msc.ino                — USB Mass Storage: exposes the RIGSETUP disk (install.sh,
+                         daemon, pyserial wheel)
 jd9853_init.h          — display register init sequence
 touch_axs5106l.h       — AXS5106L I2C touch driver
 canvas_psram.h         — Arduino_Canvas_PSRAM
-msc_image.h            — MSC FAT disk image (PROGMEM)
+msc_image.h            — MSC FAT12 disk image (PROGMEM) — GENERATED from pi/ by
+                         tools/gen_msc_image.py (never edit by hand)
 page_html.h            — dashboard, networks, install, sysinfo, OTA pages
 profiles_html.h        — NVS profile manager page
 macros_html.h          — v5: GUI macro / menu / quick-button editor (/macros)
@@ -75,8 +77,16 @@ hms_logo_web.h         — PNG logo for the web banner
 > copies it into the build and it overrides the IDE partition scheme. The old file
 > (LittleFS era) had no `fat` partition, so `FFat.begin()` could not mount. Removed in v5.
 
-Pi side (not yet in this repo): `rig_daemon.py` (systemd service, never modified by
-this project), `install.sh`, offline `pyserial` wheel.
+Pi side lives in [`pi/`](../pi/): `install.sh`, `uninstall.sh`, `rig_daemon.py`
+(systemd service `rig-console`), `rig-console.service` (reference copy) and the offline
+`pyserial` wheel. After editing anything in `pi/`, run `python3 tools/gen_msc_image.py`
+from the repo root and commit `pi/` together with the regenerated `msc_image.h`.
+CI fails if `msc_image.h` is out of date with `pi/`.
+
+`gen_msc_image.py` writes `INSTALL.SH`, `DAEMON.PY` and `PYSERIAL.WHL` in contiguous
+clusters; the boot sector is identical to the original hand-built image. One FAT sector
+can only address clusters ≤ 340 (fsck.fat warns about this — inherited and harmless),
+so the files must stay below ~173 KB in total; the script enforces the limit.
 
 ---
 
@@ -142,7 +152,7 @@ STATE_SCAN       — Wi-Fi scan results
 | GET | `/installonpi` | Install-on-Pi page |
 | GET | `/info` | System info page |
 | GET | `/connect` | Connect Pi to a named profile |
-| GET | `/status` | JSON: Pi + ESP status |
+| GET | `/status` | JSON: Pi + ESP status (`ssid` = real SSID, `conn` = NM connection) |
 | POST | `/addwifi` | Add Pi profile via USB serial |
 | POST | `/api/installonpi` | Trigger HID install on the Pi |
 | GET | `/profiles` | NVS profile manager |
@@ -154,7 +164,7 @@ STATE_SCAN       — Wi-Fi scan results
 | POST | `/api/nvsconnect` | Tell Pi to connect an NVS slot |
 | GET | `/api/quickbtns` | QB slots JSON `[{slot, macroid}, ...]` |
 | POST | `/api/quickbtns/save` | Save one QB slot (`slot`, `macroid`) |
-| GET | `/api/info` | System diagnostics JSON |
+| GET | `/api/info` | System diagnostics JSON (incl. `pi_ssid`, `pi_conn`) |
 | GET | `/api/files` | FFat file list `[{name, size}, ...]` |
 | POST | `/api/files/del` | Delete FFat file (`name`) |
 | POST | `/upload` | Upload file to FFat (multipart `file`) |
@@ -190,13 +200,26 @@ CTL:RESIZE:<cols>:<rows>                 — terminal size
 
 ```
 ACK                      — reply to HELLO
-STATUS:SSID:<ssid>       — active SSID (or NONE)
+STATUS:SSID:<ssid>       — real Wi-Fi SSID from nmcli (or NONE) → activeSSID (display)
+STATUS:CONN:<name>       — NetworkManager connection name (or NONE) → activeConn
+                           (profile matching, CMD:CONNECT)
 STATUS:IP:<ip>           — active IP (or NONE)
 STATUS:PORT:<device>     — USB port in use (e.g. ttyACM0)
-PROFILES:<p1>,<p2>,...
+PROFILES:<p1>,<p2>,...   — NM connection names (stored in piProfiles[].ssid)
+PROFILES_FULL:...        — full profile list
 OK:CONNECT:<profile> / ERR:CONNECT:<profile>
 OK:ADDWIFI:<ssid>    / ERR:ADDWIFI:<ssid>
+OK:ADDWIFI_FULL:...  / ERR:ADDWIFI_FULL:...
+SCAN_RESULT:...          — Pi-side Wi-Fi scan result
 TERM:OUT:<b64>           — terminal output
+```
+
+### Installer (install.sh → ESP32, during Install on Pi)
+
+```
+RIG:INSTALL_START / RIG:INSTALL_DEPS / RIG:INSTALL_DAEMON / RIG:INSTALL_SERVICE
+RIG:INSTALL_DONE         — ESP ejects MSC, waits 3 s, sends HELLO (auto-connect)
+RIG:INSTALL_ERR_NOROOT / RIG:INSTALL_ERR_COPY / RIG:INSTALL_ERR_SERVICE
 ```
 
 Polling: `POLL_INTERVAL_MS = 5000`; `PI_TIMEOUT_MS = 15000` → `piConnected = false`.
@@ -257,7 +280,7 @@ commit both. The script asserts: no FitAddon, `termFit` present, vertical QB pre
 |---|---|
 | CDC-ACM | Serial link to `rig_daemon.py` |
 | HID keyboard | Pi install: Ctrl+Alt+T, then types a curl/install command |
-| MSC | Exposes `rig_daemon.py` as a readable FAT disk |
+| MSC | `RIGSETUP` FAT12 disk with `install.sh`, `daemon.py`, `pyserial.whl` (from `pi/`) |
 
 ## Splash screen
 
@@ -285,6 +308,8 @@ commit both. The script asserts: no FitAddon, `termFit` present, vertical QB pre
 | Web OTA upload failed | `/update` page sent the file as a raw body (`xhr.send(file)`); `handleOtaUpload()` reads `server.upload()`, which is only valid for multipart. With a raw body core 3.x routes the request to the raw path and `server.upload()` is invalid | Page sends `FormData`; response moved to `handleOtaDone()` so exactly one reply is always sent |
 | Install on Pi typed garbage (`/` → `-`, `;` → `ö`) | HID sends key positions, not characters; the Pi applies its own layout (US codes on a Swedish Pi) | Layout auto-detection: the RIGSETUP probe is typed with en_US, sv_SE, de_DE, fr_FR, es_ES in turn (Ctrl+C before each); the one that answers over CDC is used for the rest. Wrong-layout probes were checked to be harmless syntax errors |
 | FFat likely never mounted | `partitions.csv` in the sketch folder overrode the IDE scheme; it had no `fat` partition | File removed |
+| Pi not connected after install until reboot | Nothing re-sent `HELLO` after the MSC disk was ejected and USB re-enumerated | After `RIG:INSTALL_DONE`: eject MSC, wait 3 s, flush serial, send `HELLO` |
+| Display showed NM connection name instead of SSID | Daemon reported `GENERAL.CONNECTION` as SSID | Daemon sends real SSID (`STATUS:SSID`) and connection name (`STATUS:CONN`) separately |
 
 ---
 
@@ -304,6 +329,12 @@ commit both. The script asserts: no FitAddon, `termFit` present, vertical QB pre
 - [x] Fixed web OTA: page sent a raw body, server handler expects multipart
 - [x] Compiles cleanly with arduino-cli (core 3.3.12, GFX 1.6.9, WebSockets 2.7.2)
 - [x] Added `.github/workflows/build.yml` (CI build + `.bin` artifacts)
-- [ ] Confirm the first CI run on GitHub is green
+- [x] CI runs green on GitHub (~5.5 min per run)
+- [x] HID keyboard layout auto-detection for Install on Pi
+- [x] Auto-connect after install (`HELLO` after `RIG:INSTALL_DONE`)
+- [x] `STATUS:CONN` — real SSID separated from NM connection name
+- [x] Pi-side sources in `pi/` + `uninstall.sh`; `tools/gen_msc_image.py` + CI freshness check
 - [ ] First flash via USB (new partition table), then test OTA and FFat on hardware
+- [ ] Test Install on Pi with the regenerated `msc_image.h` (contiguous layout) on hardware
+- [ ] Verify `STATUS:CONN` / SSID display on hardware
 - [ ] Verify submenu handling in `macros_html.h` (`mkEntry()`)

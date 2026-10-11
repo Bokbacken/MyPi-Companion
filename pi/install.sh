@@ -64,10 +64,20 @@ echo "      OK"
 fb "RIG:INSTALL_DEPS"
 echo "[1/5] Installing pyserial (offline)..."
 # The pyserial wheel is bundled on the RIGSETUP disk — no internet needed.
-WHL=$(find "$SCRIPT_DIR" -name 'pyserial.whl' | sort | tail -1)
-if [ -n "$WHL" ]; then
-  python3 -m pip install --quiet --no-index "$WHL" \
-    || pip3    install --quiet --no-index "$WHL" || true
+# -iname: FAT short names may be shown in upper case (PYSERIAL.WHL).
+WHL=$(find "$SCRIPT_DIR" -iname 'pyserial.whl' | sort | tail -1)
+if python3 -c 'import serial' 2>/dev/null; then
+  echo "      pyserial already installed"
+elif [ -n "$WHL" ]; then
+  # pip only accepts wheels with a valid PEP 427 file name, so copy the
+  # 8.3-named file to its real name first.
+  TMP_WHL="/tmp/pyserial-3.5-py2.py3-none-any.whl"
+  cp -f "$WHL" "$TMP_WHL"
+  # --break-system-packages is needed on Bookworm (PEP 668) and unknown to old pip.
+  python3 -m pip install --quiet --no-index "$TMP_WHL" 2>/dev/null \
+    || python3 -m pip install --quiet --no-index --break-system-packages "$TMP_WHL" \
+    || true
+  rm -f "$TMP_WHL"
 else
   # Fallback: try apt (requires internet)
   apt-get install -y -q python3-serial || true

@@ -17,6 +17,11 @@ macro pool on FFat · base64-correct macros · `termFit()` · FFat file manageme
   separators, QB slots, JSON import/export)
 - Terminal "Edit macros & menus…" opens `/macros`
 - 58 example Raspberry Pi macros in [`examples/`](../examples/)
+- Web OTA fix (multipart), FFat fix (removed `partitions.csv`)
+- HID keyboard layout auto-detection; auto-connect after install
+- `STATUS:CONN`: real SSID on the display, NM connection name for switching
+- Pi-side sources in [`pi/`](../pi/) incl. `uninstall.sh`; `tools/gen_msc_image.py`
+- GitHub Actions build (`arduino-cli`) with freshness checks for generated headers
 
 ---
 
@@ -40,8 +45,8 @@ click to run, Shift+click to "Add as macro", export txt/md.
 ### 4. Web file editor — medium
 `/editor`, CodeMirror 6 (~80 KB gzip) or a minimal custom editor. Daemon reads the file →
 base64 over serial → browser; save goes back and the daemon writes with `sudo tee`.
-**Requires daemon changes** — conflicts with the "rig_daemon.py is never changed" rule;
-needs a decision.
+**Requires daemon changes** (now possible: edit `pi/rig_daemon.py`, regenerate
+`msc_image.h`, reinstall on the Pi).
 
 ### 5. File upload / download — medium
 Drag-and-drop upload, chunked base64 over WebSocket; download via daemon.
@@ -64,8 +69,7 @@ New message `STATUS:SYS:cpu:ram:temp:disk` (**daemon change**).
 - QR code with `http://rigconsole.local` on the display
 - Extended Pi health (CPU temp, uptime) on `STATE_ADV_INFO`
 - NVS profile export/import (`/api/nvsimport`)
-- Add Pi-side files (`rig_daemon.py`, `install.sh`) to this repo
-- Optional: GitHub Actions build with `arduino-cli`
+- Optional: put `uninstall.sh` on the RIGSETUP disk too
 
 ## Longer term
 

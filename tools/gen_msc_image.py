@@ -14,7 +14,16 @@ And writes:
     HMS_RigConsole_v5/msc_image.h
 
 The output is a FAT12 disk image (512 sectors × 512 bytes = 256 KB) encoded
-as a C uint8_t array, identical in format to the original hand-built header.
+as a C uint8_t array. The boot sector is byte-identical to the original
+hand-built image; files are stored in contiguous cluster chains.
+
+The output is deterministic: CI regenerates the header and fails if the
+committed msc_image.h differs.
+
+Known limitation (inherited from the original image): one FAT sector can only
+address clusters 0..340, while the volume has 505 data clusters, so fsck.fat
+reports "only space for 339 FAT entries". This is harmless as long as all files
+fit below cluster 341 (~173 KB in total) — the script enforces that limit.
 """
 
 import math
@@ -41,8 +50,11 @@ NUM_FATS            = 2
 ROOT_ENTRIES        = 64
 FAT_SECTORS         = 1          # 512 bytes → 340 addressable FAT12 entries
 MEDIA_BYTE          = 0xF8
-SECTORS_PER_TRACK   = 9
-NUM_HEADS           = 2
+SECTORS_PER_TRACK   = 1          # CHS geometry is unused for a USB MSC disk;
+NUM_HEADS           = 1          # values match the original hand-built image
+DRIVE_NUMBER        = 0x80
+VOLUME_SERIAL       = b"\xDE\xAD\xBE\xEF"
+VOLUME_LABEL        = b"RIGSETUP   "   # 11 bytes, boot sector + root dir entry
 
 # Derived offsets
 FAT1_START   = RESERVED_SECTORS * BYTES_PER_SECTOR
@@ -50,6 +62,7 @@ FAT2_START   = FAT1_START + FAT_SECTORS * BYTES_PER_SECTOR
 ROOT_START   = FAT2_START + FAT_SECTORS * BYTES_PER_SECTOR  # = 0x600
 DATA_START   = ROOT_START + ROOT_ENTRIES * 32               # = 0xE00
 FIRST_CLUSTER = 2   # cluster numbering starts at 2
+MAX_CLUSTER   = (FAT_SECTORS * BYTES_PER_SECTOR * 2) // 3 - 1   # 340
 
 # Files to embed on the disk (8.3 FAT name, source path, read-mode)
 FILES = [
@@ -94,15 +107,28 @@ def make_boot_sector() -> bytes:
     struct.pack_into("<I", bs, 28, 0)   # hidden sectors
     struct.pack_into("<I", bs, 32, 0)   # large total sectors
     # Extended BPB
-    bs[36] = 0x00                       # drive number
+    bs[36] = DRIVE_NUMBER
     bs[37] = 0x00
     bs[38] = 0x29                       # extended boot signature
-    struct.pack_into("<I", bs, 39, 0x12345678)  # volume serial
-    bs[43:54] = b"RIGSETUP   "         # volume label (11 bytes)
+    bs[39:43] = VOLUME_SERIAL           # stored byte-for-byte as in the original
+    bs[43:54] = VOLUME_LABEL
     bs[54:62] = b"FAT12   "
     bs[510] = 0x55
     bs[511] = 0xAA
     return bytes(bs)
+
+
+def make_label_entry() -> bytes:
+    """Return the root-directory volume label entry.
+
+    Linux (blkid/udisks) reads the label from this entry, not from the boot
+    sector. Without it the disk mounts as /media/<user>/EFBE-ADDE instead of
+    /media/<user>/RIGSETUP and hidInstallOnPi() cannot find it.
+    """
+    de = bytearray(32)
+    de[0:11] = VOLUME_LABEL
+    de[11]   = 0x08  # attribute: volume label
+    return bytes(de)
 
 
 def make_dir_entry(name83: bytes, start_cluster: int, size: int) -> bytes:
@@ -111,6 +137,7 @@ def make_dir_entry(name83: bytes, start_cluster: int, size: int) -> bytes:
     de = bytearray(32)
     de[0:11] = name83
     de[11]   = 0x20  # attribute: archive
+    de[12]   = 0x18  # NT case flags: show base name and extension in lower case
     struct.pack_into("<H", de, 26, start_cluster)
     struct.pack_into("<I", de, 28, size)
     return bytes(de)
@@ -146,6 +173,9 @@ def build_image() -> bytes:
         start_cluster = next_cluster
         chain = list(range(next_cluster, next_cluster + n_clusters))
         next_cluster += n_clusters
+        if chain[-1] > MAX_CLUSTER:
+            sys.exit(f"ERROR: files do not fit — {src_path.name} ends at cluster "
+                     f"{chain[-1]}, FAT can only address up to {MAX_CLUSTER}")
 
         # Write FAT chain
         for i, c in enumerate(chain):
@@ -166,8 +196,8 @@ def build_image() -> bytes:
     image[FAT1_START : FAT1_START + len(fat)] = fat
     image[FAT2_START : FAT2_START + len(fat)] = fat
 
-    # Write root directory
-    for i, de in enumerate(dir_entries):
+    # Write root directory: volume label first (as mkfs.fat does), then files
+    for i, de in enumerate([make_label_entry()] + dir_entries):
         off = ROOT_START + i * 32
         image[off : off + 32] = de
 
