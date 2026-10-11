@@ -322,7 +322,10 @@ var dirty   = false;  // unsaved changes flag
 // ================================================================
 window.addEventListener('load', async function() {
   st('Laddar…');
+  // Load all data in parallel, then render once — avoids the race where
+  // rt() runs before MP is populated and macro refs resolve to '?'.
   await Promise.all([loadMacros(), loadMenus(), loadQB()]);
+  rl(); rt(); rqb();
   st('Redo');
 });
 
@@ -331,7 +334,6 @@ async function loadMacros() {
     var r = await fetch('/files/macros.json');
     if (r.ok) MP = await r.json();
   } catch(e) {}
-  rl();
 }
 
 async function loadMenus() {
@@ -339,7 +341,6 @@ async function loadMenus() {
     var r = await fetch('/files/menus.json');
     if (r.ok) MC = await r.json();
   } catch(e) {}
-  rt();
 }
 
 async function loadQB() {
@@ -350,7 +351,6 @@ async function loadQB() {
       arr.forEach(function(x){ if(x.slot>=0&&x.slot<25) QB[x.slot]=x.macroid; });
     }
   } catch(e) {}
-  rqb();
 }
 
 // ================================================================
