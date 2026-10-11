@@ -28,8 +28,14 @@ static bool _sdOnBoot  = false;
 
 bool sdMount() {
   if (_sdMounted) return true;
-  // mode1bit = true, no auto-format
-  if (!SD_MMC.begin("/sdcard", true, false, SDMMC_FREQ_DEFAULT)) {
+  // mode1bit = true, no auto-format.  Retry: right after the host
+  // released the card (SD Share stop) the first init can fail.
+  bool ok = false;
+  for (int attempt = 0; attempt < 3 && !ok; attempt++) {
+    if (attempt) { SD_MMC.end(); delay(250); }
+    ok = SD_MMC.begin("/sdcard", true, false, SDMMC_FREQ_DEFAULT);
+  }
+  if (!ok) {
     Serial.println("SD: mount failed (no card?)");
     return false;
   }
@@ -85,6 +91,7 @@ void sdShareStop() {
   mscSetBackendNone();
   // The host may have changed the filesystem — remount for a fresh view.
   if (_sdMounted) { SD_MMC.end(); _sdMounted = false; }
+  delay(200);   // let the card settle after the last host write
   sdMount();
 }
 

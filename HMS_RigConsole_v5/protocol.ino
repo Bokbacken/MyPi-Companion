@@ -47,6 +47,14 @@ void processMsg(const String& msg) {
 
   // ACK — Pi confirms handshake; start the polling clock
   if (msg == "ACK") {
+    // Report why we (re)booted once per boot — shows up in the daemon journal,
+    // which is otherwise not listening yet when setup() runs.
+    static bool resetReported = false;
+    if (!resetReported) {
+      resetReported = true;
+      Serial.printf("boot: reset reason %d (1=power-on 3=sw 4=panic 5/6/7=watchdog 9=brownout)\n",
+                    (int)esp_reset_reason());
+    }
     piConnected   = true;
     lastStatusMs  = millis();
     lastPollMs    = 0;           // Trigger first CMD:GET_STATUS immediately

@@ -377,6 +377,30 @@ def _esp_msc_mounts() -> List[tuple]:
     return mounts
 
 
+def _unmount(dev: str, mnt: str, lazy: bool) -> subprocess.CompletedProcess:
+    """udisksctl first (works without root for udisks mounts), then sudo umount."""
+    cmd = ["udisksctl", "unmount", "-b", dev, "--no-user-interaction"]
+    if lazy:
+        cmd.append("--force")              # udisks: --force = lazy unmount
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+    if r.returncode != 0:
+        # Fallback for mounts not owned by udisks (e.g. manual sudo mount)
+        cmd = ["sudo", "-n", "umount"] + (["-l"] if lazy else []) + [mnt]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+    return r
+
+
+def _holders(mnt: str) -> str:
+    """Names of processes keeping mnt busy (best effort, for the log)."""
+    try:
+        r = subprocess.run(["fuser", "-vm", mnt], capture_output=True, text=True, timeout=5)
+        names = {ln.split()[-1] for ln in r.stderr.splitlines()[1:] if ln.split()}
+        names.discard(mnt + ":")
+        return ", ".join(sorted(names)) or "unknown"
+    except Exception:
+        return "unknown"
+
+
 def eject_esp_msc() -> Optional[str]:
     """
     Flush and unmount the ESP32 USB disk before the ESP removes it.
@@ -387,14 +411,14 @@ def eject_esp_msc() -> Optional[str]:
         subprocess.run(["sync"], timeout=30)
         errors = []
         for dev, mnt in _esp_msc_mounts():
-            r = subprocess.run(
-                ["udisksctl", "unmount", "-b", dev, "--no-user-interaction"],
-                capture_output=True, text=True, timeout=15,
-            )
-            if r.returncode != 0:
-                # Fallback for mounts not owned by udisks (e.g. manual sudo mount)
-                r = subprocess.run(["sudo", "-n", "umount", mnt],
-                                   capture_output=True, text=True, timeout=15)
+            r = _unmount(dev, mnt, lazy=False)
+            if r.returncode != 0 and "busy" in (r.stderr or "").lower():
+                # Something (typically a file manager window) still has the
+                # mount open.  Data is already synced and the ESP removes the
+                # media regardless, so detach lazily instead of leaving a
+                # dead mount behind.
+                log.warning("%s busy (held by: %s) — lazy unmount", mnt, _holders(mnt))
+                r = _unmount(dev, mnt, lazy=True)
             if r.returncode == 0:
                 log.info("Unmounted %s (%s)", dev, mnt)
             else:
