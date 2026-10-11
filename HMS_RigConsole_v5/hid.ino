@@ -25,8 +25,70 @@ USBHIDKeyboard HIDKeyboard;
 //  hidBegin()  — call once in setup(), AFTER mscBegin()
 // ----------------------------------------------------------
 void hidBegin() {
+  // Default (en_US) map is only used for layout-neutral shortcuts such as
+  // Ctrl+Alt+T. Text is typed with hidTypeLayout(), see below.
   HIDKeyboard.begin();
   USB.begin();
+}
+
+// ----------------------------------------------------------
+//  Keyboard layout handling
+//
+//  USB HID keyboards cannot send characters — only key positions
+//  (usage codes). The Pi translates them with ITS keyboard layout,
+//  so e.g. "/" typed with US codes arrives as "-" on a Swedish Pi.
+//
+//  We therefore auto-detect the Pi's layout: the RIGSETUP probe
+//  command is typed with each candidate layout in turn, and only
+//  the correctly interpreted one answers over the CDC serial port.
+//  A wrongly interpreted probe is a harmless bash syntax error
+//  (verified for all pairs below). The detected layout is then used
+//  for the rest of the install and tried first next time.
+//
+//  Layouts that type the probe identically are covered implicitly:
+//  sv_SE also covers da_DK; es_ES also covers it_IT and pt_PT.
+// ----------------------------------------------------------
+static const uint8_t *const HID_LAYOUTS[] = {
+  KeyboardLayout_en_US, KeyboardLayout_sv_SE, KeyboardLayout_de_DE,
+  KeyboardLayout_fr_FR, KeyboardLayout_es_ES
+};
+static const char *const HID_LAYOUT_NAMES[] = {
+  "en_US", "sv_SE", "de_DE", "fr_FR", "es_ES"
+};
+static const uint8_t HID_LAYOUT_COUNT = sizeof(HID_LAYOUTS) / sizeof(HID_LAYOUTS[0]);
+static uint8_t hidLayoutIdx = 0;   // last detected layout (RAM only)
+
+// Press and release one key with the given modifier bits.
+static void hidSendKey(uint8_t mods, uint8_t code) {
+  KeyReport r = { mods, 0, { code, 0, 0, 0, 0, 0 } };
+  HIDKeyboard.sendReport(&r);
+  KeyReport up = { 0, 0, { 0, 0, 0, 0, 0, 0 } };
+  HIDKeyboard.sendReport(&up);
+}
+
+// Type an ASCII string using the given layout table, then press Enter.
+// Decoding of the layout table mirrors USBHIDKeyboard::press().
+static void hidTypeLayout(uint8_t idx, const char *s) {
+  const uint8_t *map = HID_LAYOUTS[idx];
+  for (; *s; s++) {
+    uint8_t c = (uint8_t)*s;
+    if (c >= 128) continue;
+    uint8_t k = map[c];
+    if (!k) continue;                       // not typeable in this layout
+    uint8_t mods = 0;
+    if (k & 0x80) { mods |= 0x02; k &= 0x7F; }   // SHIFT  -> left shift
+    if (k & 0x40) { mods |= 0x40; k &= ~0x40; }  // ALT_GR -> right alt
+    if (k == 0x32) k = 0x64;                     // ISO_REPLACEMENT -> ISO_KEY
+    hidSendKey(mods, k);
+  }
+  hidSendKey(0, 0x28);                      // Enter
+}
+
+// Ctrl+C — clears any half-typed line or continuation prompt (">")
+// left behind by a probe typed with the wrong layout.
+static void hidCancelLine() {
+  hidSendKey(0x01, 0x06);                   // left Ctrl + 'c' key
+  delay(150);
 }
 
 // ----------------------------------------------------------
@@ -42,10 +104,10 @@ static void hidSetStatus(uint8_t line, const char *msg, uint16_t col) {
 }
 
 // ----------------------------------------------------------
-//  hidType()  — type a string in the terminal and press Enter.
+//  hidType()  — type a string with the detected layout + Enter.
 // ----------------------------------------------------------
 static void hidType(const char *s) {
-  HIDKeyboard.println(s);
+  hidTypeLayout(hidLayoutIdx, s);
 }
 
 // ----------------------------------------------------------
@@ -85,31 +147,31 @@ void hidInstallOnPi() {
   HIDKeyboard.releaseAll();
   delay(3000);   // wait for terminal + shell prompt
 
-  // NOTE: setxkbmap us is intentionally NOT used here.
-  // Under Wayland, HID keyboard input is processed by the Wayland
-  // compositor (Swedish layout) before X11 ever sees it, so
-  // setxkbmap has no effect on HID keycodes.
-  //
-  // Solution: avoid the two characters that differ on Swedish vs US:
-  //   |  (pipe)         → arrives as ~  on Swedish layout
-  //   "  (double quote) → arrives as @  on Swedish layout
-  // All other special chars ($, (, ), /, {, }, ;, >, -) are identical.
+  // NOTE: setxkbmap is intentionally NOT used (no effect under Wayland).
+  // The Pi's keyboard layout is auto-detected instead — see
+  // "Keyboard layout handling" above. Avoid | and " in typed commands.
 
-  // ── 3. Find RIGSETUP mount point (disk already inserted in step 1) ──
+  // ── 3. Find RIGSETUP mount point + detect keyboard layout ──
   hidSetStatus(0, "Waiting for disk", COL_DIM);
   while (Serial.available()) Serial.read();   // flush RX
 
   String mountPath;
+  const uint8_t firstLayout = hidLayoutIdx;
 
   for (int attempt = 0; attempt < 20 && mountPath.isEmpty(); attempt++) {
+    // Cycle through candidate layouts, starting with the last detected.
+    uint8_t idx = (firstLayout + attempt) % HID_LAYOUT_COUNT;
+
     // Broadcast find result to all possible ACM ports.
-    // Writing to a tmpfile first is not needed — echoing directly
-    // to each ACM port is safe: if the port does not exist or we
-    // lack permission, 2>/dev/null suppresses the error.
-    hidType(
+    // Echoing directly to each ACM port is safe: if the port does not
+    // exist or we lack permission, 2>/dev/null suppresses the error.
+    // The ".:" in the reply also proves "." is typed correctly
+    // (needed later for install.sh).
+    hidCancelLine();
+    hidTypeLayout(idx,
       "for D in $(find /media /run/media -maxdepth 3 -name RIGSETUP -type d 2>/dev/null);"
       " do for P in /dev/ttyACM0 /dev/ttyACM1 /dev/ttyACM2 /dev/ttyACM3;"
-      " do echo RIGSETUP:$D > $P 2>/dev/null; done; break; done"
+      " do echo RIGSETUP:.:$D > $P 2>/dev/null; done; break; done"
     );
 
     // Read Serial for up to 1500 ms.
@@ -120,8 +182,9 @@ void hidInstallOnPi() {
         char c = Serial.read();
         if (c == '\n') {
           rxLine.trim();
-          if (rxLine.startsWith("RIGSETUP:")) {
-            mountPath = rxLine.substring(9);
+          if (rxLine.startsWith("RIGSETUP:.:")) {
+            mountPath    = rxLine.substring(11);
+            hidLayoutIdx = idx;              // this layout works
           }
           rxLine = "";
         } else if (c != '\r') {
@@ -134,7 +197,7 @@ void hidInstallOnPi() {
 
     if (mountPath.isEmpty()) {
       char buf[20];
-      snprintf(buf, sizeof(buf), "Waiting... %2ds", 20 - attempt);
+      snprintf(buf, sizeof(buf), "Try %s %2d", HID_LAYOUT_NAMES[idx], 20 - attempt);
       hidSetStatus(1, buf, COL_DIM);
       delay(500);
     }
