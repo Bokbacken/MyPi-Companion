@@ -58,7 +58,10 @@ bool sdIsShareActive() { return mscBackendIsSD(); }
 uint32_t sdSectorCount() {
   if (!_sdMounted) return 0;
   if (SD_MMC.sectorSize() != 512) return 0;
-  return (uint32_t)SD_MMC.numSectors();
+  // NOTE: SD_MMC.numSectors() returns the *filesystem* size (totalBytes),
+  // which excludes FAT tables/reserved area. MSC must expose the whole
+  // physical card, so derive the count from the card capacity (CSD).
+  return (uint32_t)(SD_MMC.cardSize() / 512ULL);
 }
 
 bool sdReadSector(uint8_t *buf, uint32_t sector) {
