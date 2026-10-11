@@ -16,6 +16,8 @@
 #    RIG:INSTALL_DEPS
 #    RIG:INSTALL_DAEMON
 #    RIG:INSTALL_SERVICE
+#    RIG:INSTALL_NM      — ensuring NetworkManager manages wlan0
+#    RIG:INSTALL_POLKIT  — installing polkit rule
 #    RIG:INSTALL_DONE
 #    RIG:INSTALL_ERR_NOROOT
 #    RIG:INSTALL_ERR_DEPS
@@ -58,14 +60,54 @@ fi
 # ── 0. Stop existing service before touching any files ────────
 #  Ensures the running daemon releases /dev/ttyACM0 and its
 #  file handle on rig_daemon.py before we overwrite it.
-echo "[0/5] Stopping existing daemon (if running)..."
+echo "[0/6] Stopping existing daemon (if running)..."
 systemctl stop    "$SERVICE_DAEMON" 2>/dev/null || true
 systemctl disable "$SERVICE_DAEMON" 2>/dev/null || true
 echo "      OK"
 
-# ── 1. Python dependencies (offline — wheel bundled on disk) ──
+# ── 1. Ensure NetworkManager manages wlan0 ────────────────────
+#  Bullseye images use dhcpcd + wpa_supplicant; the daemon needs
+#  nmcli. Install/enable NM and migrate wpa_supplicant networks.
+fb "RIG:INSTALL_NM"
+echo "[1/6] Ensuring NetworkManager manages wlan0..."
+NM_STATE=""
+if command -v nmcli >/dev/null 2>&1; then
+  NM_STATE="$(nmcli -t -f GENERAL.STATE device show wlan0 2>/dev/null || true)"
+fi
+if [ -z "$NM_STATE" ] || echo "$NM_STATE" | grep -qi "unmanaged"; then
+  echo "      NetworkManager not managing wlan0 — switching from dhcpcd..."
+  apt-get install -y -q network-manager || true
+  { systemctl stop dhcpcd && systemctl disable dhcpcd; } 2>/dev/null || true
+  { systemctl enable NetworkManager && systemctl start NetworkManager; } || true
+  for _ in $(seq 1 10); do
+    nmcli device show wlan0 >/dev/null 2>&1 && break
+    sleep 1
+  done
+  # Best-effort: import ssid/psk networks from wpa_supplicant.conf
+  WPA_CONF="/etc/wpa_supplicant/wpa_supplicant.conf"
+  if [ -f "$WPA_CONF" ] && command -v nmcli >/dev/null 2>&1; then
+    WPA_SSID=""
+    while IFS= read -r line; do
+      line="$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+      case "$line" in
+        ssid=*) WPA_SSID="${line#ssid=}"; WPA_SSID="${WPA_SSID#\"}"; WPA_SSID="${WPA_SSID%\"}" ;;
+        psk=*)
+          WPA_PSK="${line#psk=}"; WPA_PSK="${WPA_PSK#\"}"; WPA_PSK="${WPA_PSK%\"}"
+          if [ -n "$WPA_SSID" ]; then
+            nmcli connection add type wifi ifname wlan0 con-name "$WPA_SSID" \
+              ssid "$WPA_SSID" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WPA_PSK" \
+              >/dev/null 2>&1 || true
+          fi
+          WPA_SSID="" ;;
+      esac
+    done < "$WPA_CONF" || true
+  fi
+fi
+echo "      OK"
+
+# ── 2. Python dependencies (offline — wheel bundled on disk) ──
 fb "RIG:INSTALL_DEPS"
-echo "[1/5] Installing pyserial (offline)..."
+echo "[2/6] Installing pyserial (offline)..."
 # The pyserial wheel is bundled on the RIGSETUP disk — no internet needed.
 # -iname: FAT short names may be shown in upper case (PYSERIAL.WHL).
 WHL=$(find "$SCRIPT_DIR" -iname 'pyserial.whl' | sort | tail -1)
@@ -100,9 +142,9 @@ if ! PYTHONPATH="$INSTALL_DIR/lib" python3 -c 'import serial' 2>/dev/null; then
 fi
 echo "      OK"
 
-# ── 2. Copy daemon ────────────────────────────────────────────
+# ── 3. Copy daemon ────────────────────────────────────────────
 fb "RIG:INSTALL_DAEMON"
-echo "[2/5] Copying daemon to $INSTALL_DIR ..."
+echo "[3/6] Copying daemon to $INSTALL_DIR ..."
 mkdir -p "$INSTALL_DIR"
 # On the RIGSETUP disk the file is stored as 'daemon.py' (8.3 FAT name).
 if ! cp -f "$SCRIPT_DIR/daemon.py" "$INSTALL_DIR/rig_daemon.py"; then
@@ -112,14 +154,14 @@ fi
 chmod 755 "$INSTALL_DIR/rig_daemon.py"
 echo "      OK"
 
-# ── 3. dialout group ──────────────────────────────────────────
-echo "[3/5] Adding $RUN_USER to dialout..."
+# ── 4. dialout group ──────────────────────────────────────────
+echo "[4/6] Adding $RUN_USER to dialout..."
 usermod -aG dialout "$RUN_USER"
 echo "      OK"
 
-# ── 4. Systemd service (inlined) ──────────────────────────────
+# ── 5. Systemd service (inlined) ──────────────────────────────
 fb "RIG:INSTALL_SERVICE"
-echo "[4/5] Installing systemd service..."
+echo "[5/6] Installing systemd service..."
 
 cat > /etc/systemd/system/${SERVICE_DAEMON}.service << SVCEOF
 [Unit]
@@ -153,6 +195,29 @@ fi
 
 systemctl enable  "$SERVICE_DAEMON"
 systemctl restart "$SERVICE_DAEMON" || true
+echo "      OK"
+
+# ── 6. Polkit rule: nmcli (incl. PSK read) without sudo ───────
+echo "[6/6] Installing polkit rule..."
+fb "RIG:INSTALL_POLKIT"
+mkdir -p /etc/polkit-1/localauthority/50-local.d /etc/polkit-1/rules.d
+cat > /etc/polkit-1/localauthority/50-local.d/rig-console-nmcli.pkla << PKLAEOF
+[HMS Rig Console — nmcli without password]
+Identity=unix-user:$RUN_USER
+Action=org.freedesktop.NetworkManager.*
+ResultAny=yes
+ResultInactive=yes
+ResultActive=yes
+PKLAEOF
+cat > /etc/polkit-1/rules.d/50-rig-console.rules << RULESEOF
+polkit.addRule(function(action, subject) {
+    if (action.id.indexOf("org.freedesktop.NetworkManager.") === 0 &&
+        subject.user === "$RUN_USER") {
+        return polkit.Result.YES;
+    }
+});
+RULESEOF
+systemctl restart polkit 2>/dev/null || true
 echo "      OK"
 
 fb "RIG:INSTALL_DONE"

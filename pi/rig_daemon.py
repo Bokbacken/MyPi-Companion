@@ -211,13 +211,13 @@ def subnet_to_prefix(sn: str) -> str:
 
 
 def get_profiles_full() -> List[tuple]:
-    """Return list of (ssid, psk) for all NM WiFi connections (requires sudo for PSK)."""
+    """Return list of (ssid, psk) for all NM WiFi connections (polkit grants PSK read)."""
     names = get_wifi_profiles()
     result: List[tuple] = []
     for name in names:
         try:
             r = subprocess.run(
-                ["sudo", "nmcli", "-s", "-t", "-f",
+                ["nmcli", "-s", "-t", "-f",
                  "802-11-wireless.ssid,802-11-wireless-security.psk",
                  "connection", "show", name],
                 capture_output=True, text=True, timeout=10,
