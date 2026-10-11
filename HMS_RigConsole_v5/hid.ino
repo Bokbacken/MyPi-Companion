@@ -25,7 +25,9 @@ USBHIDKeyboard HIDKeyboard;
 //  hidBegin()  — call once in setup(), AFTER mscBegin()
 // ----------------------------------------------------------
 void hidBegin() {
-  HIDKeyboard.begin();
+  // Use Swedish layout so that special characters (/ - ; $ etc.) are
+  // sent with the correct keycodes for the Pi's sv_SE keyboard layout.
+  HIDKeyboard.begin(KeyboardLayout_sv_SE);
   USB.begin();
 }
 
