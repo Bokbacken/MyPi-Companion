@@ -28,13 +28,10 @@ static bool _sdOnBoot  = false;
 
 bool sdMount() {
   if (_sdMounted) return true;
-  // mode1bit = true, no auto-format.  Retry: right after the host
-  // released the card (SD Share stop) the first init can fail.
-  bool ok = false;
-  for (int attempt = 0; attempt < 3 && !ok; attempt++) {
-    if (attempt) { SD_MMC.end(); delay(250); }
-    ok = SD_MMC.begin("/sdcard", true, false, SDMMC_FREQ_DEFAULT);
-  }
+  // mode1bit = true, no auto-format.  Single attempt — never retry
+  // here: a blocking retry loop would stall the HTTP server if the
+  // SDMMC peripheral is in a bad state (e.g. right after OTA reset).
+  bool ok = SD_MMC.begin("/sdcard", true, false, SDMMC_FREQ_DEFAULT);
   if (!ok) {
     Serial.println("SD: mount failed (no card?)");
     return false;
