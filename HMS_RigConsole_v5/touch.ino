@@ -479,6 +479,11 @@ void doSelect() {
         goBack();
       } else if (nvsProfiles[nvsMenuIndex].valid) {
         NvsProfile &p = nvsProfiles[nvsMenuIndex];
+        // Pending feedback until OK/ERR:ADDWIFI_FULL arrives ("\x84" = 'ä' in the CP437 GFX font)
+        hasError = false;
+        hasInfo  = true;
+        infoExpireMs = millis() + 30000UL;   // nmcli can be slow; give up after 30 s
+        strlcpy(infoMsg, "L\x84gger till WiFi...", sizeof(infoMsg));
         Serial.print("CMD:ADDWIFI_FULL:");
         Serial.print(p.ssid);            Serial.print("|");
         Serial.print(p.pass);            Serial.print("|");

@@ -87,6 +87,10 @@ void drawStatusBar() {
     char errBuf[24];
     truncate(errBuf, lastErrMsg, 23);
     drawTxt(errBuf, 4, y3, COL_ERR, COL_STATUS_BG);
+  } else if (hasInfo) {
+    char infoBuf[24];
+    truncate(infoBuf, infoMsg, 23);
+    drawTxt(infoBuf, 4, y3, COL_ACCENT, COL_STATUS_BG);
   } else if (piConnected) {
     char ipBuf[24];
     truncate(ipBuf, activeIP, 23);

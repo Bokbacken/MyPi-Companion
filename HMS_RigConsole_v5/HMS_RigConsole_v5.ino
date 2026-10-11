@@ -27,10 +27,16 @@
 //
 //  Arduino IDE settings:
 //    Board       : ESP32S3 Dev Module
+//    USB Mode    : USB-OTG (TinyUSB)   ← REQUIRED (not "Hardware CDC")
 //    USB CDC     : Enabled
 //    PSRAM       : OPI PSRAM
 //    Flash size  : 16 MB  (or 8 MB)
 //    Upload speed: 921600
+//
+//  Note: "USB-OTG (TinyUSB)" maps to USBMode=default in the FQBN.
+//  This gives a composite CDC serial + HID keyboard + MSC device.
+//  With "Hardware CDC and JTAG" (USBMode=hwcdc), HID and MSC do not
+//  work and the serial port only appears in bootloader mode.
 // ============================================================
 
 #include "config.h"
@@ -97,6 +103,9 @@ char  activeIP[24]                = "---";
 bool  piConnected                 = false;
 char  lastErrMsg[64]              = "";
 bool  hasError                    = false;
+char  infoMsg[64]                 = "";     // transient status (status bar line 3)
+bool  hasInfo                     = false;
+unsigned long infoExpireMs        = 0;      // millis() when infoMsg is cleared
 
 // -----------------------------------------------------------
 //  Menu indices
@@ -410,6 +419,13 @@ void loop() {
   if (piConnected && lastStatusMs > 0 &&
       (now - lastStatusMs) > PI_TIMEOUT_MS) {
     piConnected = false;
+    drawStatusBar();
+    gfx->flush();
+  }
+
+  // Expire transient info message (e.g. "Tillagd: <ssid>") → back to Pi IP
+  if (hasInfo && (long)(now - infoExpireMs) >= 0) {
+    hasInfo = false;
     drawStatusBar();
     gfx->flush();
   }

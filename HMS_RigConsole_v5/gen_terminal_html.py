@@ -241,6 +241,27 @@ function termFit() {
 }
 
 // ================================================================
+//  Clipboard helpers (copy works on both HTTP and HTTPS)
+// ================================================================
+function _clipCopy(text) {
+  if (!text) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).catch(() => _clipCopyExec(text));
+  } else {
+    _clipCopyExec(text);
+  }
+}
+function _clipCopyExec(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none;top:0;left:0;width:1px;height:1px';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  try { document.execCommand('copy'); } catch (_) {}
+  document.body.removeChild(ta);
+  term.focus();
+}
+
+// ================================================================
 //  Terminal init
 // ================================================================
 function initTerm() {
@@ -249,26 +270,111 @@ function initTerm() {
     fontSize,
     fontFamily: 'Menlo,Monaco,"Courier New",monospace',
     theme: { background: '#0d0d0d', foreground: '#cccccc', cursor: '#aaaaaa' },
-    scrollback: 5000,
+    scrollback: 10000,
     cursorBlink: true
   });
   term.open(document.getElementById('term'));
   requestAnimationFrame(() => { termFit(); term.focus(); });
-  term.onData(d => {
-    if (!ws || ws.readyState !== 1) return;
-    try { ws.send(btoa(d)); }
-    catch (_) {
-      const b = new TextEncoder().encode(d);
-      let s = ''; b.forEach(x => s += String.fromCharCode(x));
-      ws.send(btoa(s));
+  term.attachCustomKeyEventHandler(ev => {
+    if (ev.type !== 'keydown') return true;
+    const ctrl = ev.ctrlKey && !ev.altKey;
+
+    // Ctrl+Up / Ctrl+Down: browse local command history
+    if (ctrl && !ev.shiftKey &&
+        (ev.key === 'ArrowUp' || ev.key === 'ArrowDown')) {
+      ev.preventDefault();
+      histNav(ev.key === 'ArrowUp' ? -1 : 1);
+      return false;
     }
+
+    // Ctrl+C: copy selection if any, else send SIGINT (\x03)
+    if (ctrl && !ev.shiftKey && ev.key === 'c') {
+      const sel = term.getSelection();
+      if (sel) { _clipCopy(sel); term.clearSelection(); return false; }
+      return true;  // no selection → xterm sends \x03 (SIGINT)
+    }
+
+    // Ctrl+Shift+C: always copy selection (Linux/Windows terminal convention)
+    if (ctrl && ev.shiftKey && ev.key === 'C') {
+      const sel = term.getSelection(); if (sel) _clipCopy(sel);
+      return false;  // never send to shell
+    }
+
+    // Ctrl+V / Ctrl+Shift+V: return false so xterm skips preventDefault,
+    // which lets the browser fire the native paste event on xterm's hidden
+    // textarea → xterm's own handlePasteEvent picks it up → onData → wsSendText
+    if (ctrl && (ev.key === 'v' || (ev.shiftKey && ev.key === 'V'))) {
+      return false;
+    }
+
+    return true;
   });
+  term.onData(d => { histTrack(d); wsSendText(d); });
   term.onLineFeed(() => { sessionLog += '\n'; });
   new ResizeObserver(() => {
     termFit();
     if (ws && ws.readyState === 1)
       ws.send('CTL:RESIZE:' + term.cols + ':' + term.rows);
   }).observe(document.getElementById('termwrap'));
+}
+
+// ================================================================
+//  Command history (Ctrl+Up / Ctrl+Down, last 100 commands)
+// ================================================================
+const HIST_MAX = 100;
+let cmdHist = [];
+try { cmdHist = JSON.parse(localStorage.getItem('cmdHist') || '[]'); } catch (_) { cmdHist = []; }
+if (!Array.isArray(cmdHist)) cmdHist = [];
+let histIdx  = cmdHist.length;   // == length -> editing a new line
+let histDraft = '';
+let lineBuf  = '';               // current input line as typed (null = unknown)
+
+function wsSendText(d) {
+  if (!ws || ws.readyState !== 1) return;
+  try { ws.send(btoa(d)); }
+  catch (_) {
+    const b = new TextEncoder().encode(d);
+    let s = ''; b.forEach(x => s += String.fromCharCode(x));
+    ws.send(btoa(s));
+  }
+}
+
+function histPush(cmd) {
+  if (!cmd || !cmd.trim()) return;
+  if (cmdHist[cmdHist.length - 1] !== cmd) cmdHist.push(cmd);
+  if (cmdHist.length > HIST_MAX) cmdHist = cmdHist.slice(-HIST_MAX);
+  try { localStorage.setItem('cmdHist', JSON.stringify(cmdHist)); } catch (_) {}
+}
+
+// Follow what the user types so Enter can record the command line.
+function histTrack(d) {
+  if (d.length > 1 && d.charCodeAt(0) === 27) { lineBuf = null; return; }  // escape seq (arrows etc.)
+  for (const ch of d) {
+    const c = ch.charCodeAt(0);
+    if (ch === '\r' || ch === '\n') {
+      if (lineBuf !== null) histPush(lineBuf);
+      lineBuf = ''; histIdx = cmdHist.length; histDraft = '';
+    } else if (c === 127 || c === 8) {
+      if (lineBuf !== null) lineBuf = lineBuf.slice(0, -1);
+    } else if (c === 3 || c === 21) {          // Ctrl+C / Ctrl+U
+      lineBuf = ''; histIdx = cmdHist.length;
+    } else if (c === 9 || c === 27 || c < 32) { // Tab completion / other control -> unknown
+      lineBuf = null;
+    } else if (lineBuf !== null) {
+      lineBuf += ch;
+    }
+  }
+}
+
+function histNav(dir) {
+  if (!cmdHist.length) return;
+  if (histIdx === cmdHist.length && dir < 0) histDraft = lineBuf || '';
+  const ni = Math.max(0, Math.min(cmdHist.length, histIdx + dir));
+  if (ni === histIdx) return;
+  histIdx = ni;
+  const txt = histIdx === cmdHist.length ? histDraft : cmdHist[histIdx];
+  wsSendText('\x15' + txt);  // Ctrl+U clears the shell's line, then type the entry
+  lineBuf = txt;
 }
 
 // ================================================================

@@ -165,15 +165,22 @@ void processMsg(const String& msg) {
   // OK:ADDWIFI_FULL / ERR:ADDWIFI_FULL
   if (msg.startsWith("OK:ADDWIFI_FULL:")) {
     hasError = false;
+    hasInfo  = true;
+    infoExpireMs = millis() + 5000UL;
+    snprintf(infoMsg, sizeof(infoMsg), "Tillagd: %s", msg.substring(16).c_str());
+    drawStatusBar();
+    gfx->flush();
     return;
   }
   if (msg.startsWith("ERR:ADDWIFI_FULL:")) {
+    hasInfo  = false;
     hasError = true;
     snprintf(lastErrMsg, sizeof(lastErrMsg), "ERR: %s", msg.substring(17).c_str());
     if (currentState == STATE_STATUS || currentState == STATE_AP_ACTIVE) {
       drawHomeContent();
-      gfx->flush();
     }
+    drawStatusBar();   // replace "Lägger till WiFi..." with the error
+    gfx->flush();
     return;
   }
 
