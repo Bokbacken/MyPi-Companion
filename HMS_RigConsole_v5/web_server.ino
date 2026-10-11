@@ -558,6 +558,22 @@ static void handleStorageDownload() {
 }
 
 // ── RIGSETUP ──────────────────────────────────────────────────
+static void handleRigsetupForceCopy() {
+  if (mscBackendIsRigsetup()) {
+    // Can't overwrite files while they're mounted as USB disk.
+    server.send(409, "text/plain", "ERR: stop RIGSETUP disk first");
+    return;
+  }
+  int n = forcePopulateRigsetupFiles();
+  if (n == (int)RIGSETUP_FILE_COUNT) {
+    server.send(200, "text/plain",
+                String("OK: ") + n + " files restored from firmware");
+  } else {
+    server.send(500, "text/plain",
+                String("ERR: only ") + n + "/" + RIGSETUP_FILE_COUNT + " files written");
+  }
+}
+
 static void handleRigsetupStart() {
   if (sdIsShareActive()) sdShareStop();
   if (mscSetBackendRigsetup()) server.send(200, "text/plain", "OK");
@@ -667,9 +683,10 @@ void startWebServer() {
   server.on("/api/storage/copy",     HTTP_POST, handleStorageCopy);
   server.on("/api/storage/upload",   HTTP_POST, handleStorageUploadDone, handleStorageUpload);
   server.on("/api/storage/download", HTTP_GET,  handleStorageDownload);
-  server.on("/api/rigsetup/start",   HTTP_POST, handleRigsetupStart);
-  server.on("/api/rigsetup/stop",    HTTP_POST, handleRigsetupStop);
-  server.on("/api/rigsetup/status",  HTTP_GET,  handleRigsetupStatus);
+  server.on("/api/rigsetup/start",      HTTP_POST, handleRigsetupStart);
+  server.on("/api/rigsetup/stop",       HTTP_POST, handleRigsetupStop);
+  server.on("/api/rigsetup/status",     HTTP_GET,  handleRigsetupStatus);
+  server.on("/api/rigsetup/force-copy", HTTP_POST, handleRigsetupForceCopy);
 
   // ── OTA ────────────────────────────────────────────────────
   server.on("/update", HTTP_GET,  handleOtaPage);

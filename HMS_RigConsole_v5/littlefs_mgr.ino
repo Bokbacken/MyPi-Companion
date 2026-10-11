@@ -105,6 +105,36 @@ static void _ensureRigsetupFiles() {
   }
 }
 
+// ============================================================
+//  forcePopulateRigsetupFiles()  — overwrite ALL /rigsetup/ files
+//  from the firmware-compiled arrays, regardless of whether they
+//  already exist.  Called from /api/rigsetup/force-copy.
+//  Returns the number of files successfully written.
+// ============================================================
+int forcePopulateRigsetupFiles() {
+  if (!_fatOk) return 0;
+  if (!FFat.exists("/rigsetup")) FFat.mkdir("/rigsetup");
+  int written = 0;
+  for (size_t i = 0; i < RIGSETUP_FILE_COUNT; i++) {
+    char path[64];
+    snprintf(path, sizeof(path), "/rigsetup/%s", RIGSETUP_FILES[i].name);
+    // Remove existing file first so FILE_WRITE starts at byte 0.
+    if (FFat.exists(path)) FFat.remove(path);
+    File f = FFat.open(path, FILE_WRITE);
+    if (!f) { Serial.printf("FFat: force-copy: failed to create %s\n", path); continue; }
+    size_t w = f.write(RIGSETUP_FILES[i].data, RIGSETUP_FILES[i].size);
+    f.close();
+    if (w != RIGSETUP_FILES[i].size) {
+      Serial.printf("FFat: force-copy: short write %s — removed\n", path);
+      FFat.remove(path);
+      continue;
+    }
+    Serial.printf("FFat: force-copy: wrote %s (%u bytes)\n", path, (unsigned)RIGSETUP_FILES[i].size);
+    written++;
+  }
+  return written;
+}
+
 void littleFsBegin() {
   // true = format partition on first use if blank/corrupt
   if (!FFat.begin(true)) {
