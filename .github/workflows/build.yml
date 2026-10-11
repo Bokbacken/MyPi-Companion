@@ -45,10 +45,10 @@ jobs:
           python3 gen_terminal_html.py
           git diff --exit-code -- terminal_html.h || { echo "::error::terminal_html.h is stale - run gen_terminal_html.py and commit"; exit 1; }
 
-      - name: Verify msc_image.h is up to date with pi/
+      - name: Generate rigsetup_files.h
         run: |
-          python3 tools/gen_msc_image.py
-          git diff --exit-code -- "$SKETCH/msc_image.h" || { echo "::error::msc_image.h is stale - run tools/gen_msc_image.py and commit"; exit 1; }
+          python3 tools/gen_rigsetup_h.py
+          git diff --exit-code -- "$SKETCH/rigsetup_files.h" || { echo "::error::rigsetup_files.h is stale - run tools/gen_rigsetup_h.py and commit"; exit 1; }
 
       - name: Compile
         run: |

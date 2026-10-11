@@ -77,11 +77,11 @@ MyPi-Companion/
 ├── HMS_RigConsole_v5/        Arduino sketch folder (open the .ino in Arduino IDE)
 │   ├── HMS_RigConsole_v5.ino
 │   ├── gen_terminal_html.py  generator for terminal_html.h
-│   ├── msc_image.h           generated from pi/ by tools/gen_msc_image.py
+│   ├── rigsetup_files.h      generated from pi/ by tools/gen_rigsetup_h.py
 │   └── ...
 ├── pi/                       Pi-side sources: install.sh, uninstall.sh, rig_daemon.py,
 │                             rig-console.service, offline pyserial wheel
-├── tools/gen_msc_image.py    packs pi/ into the FAT12 disk image msc_image.h
+├── tools/gen_rigsetup_h.py   embeds pi/ files as C arrays in rigsetup_files.h
 ├── examples/                 example macros & menus (importable via /macros)
 ├── docs/                     project documentation
 │   ├── PROJECT_STATUS.md     architecture, protocol, routes, constraints
@@ -131,7 +131,7 @@ Every push and pull request is compiled by `.github/workflows/build.yml` with th
 settings above. To download the firmware: **Actions** → latest *Build firmware* run →
 **Artifacts** → `firmware-<sha>` (zip containing the `.bin` files).
 The build also fails if `terminal_html.h` is out of date with `gen_terminal_html.py`,
-or if `msc_image.h` is out of date with the files in `pi/`.
+or if `rigsetup_files.h` is out of date with the files in `pi/`.
 
 ## Generated files
 
@@ -146,14 +146,18 @@ python3 gen_terminal_html.py
 Commit both files. The generated header is kept in the repo so the sketch compiles
 without Python.
 
-`msc_image.h` is also generated — it is the FAT12 image of the `RIGSETUP` USB disk.
-Edit the files in `pi/` and run from the repo root:
+`rigsetup_files.h` is also generated — it holds the `pi/` files (one C array per file).
+At boot, any file missing from `/rigsetup/` on FFat is written from these arrays; the
+`RIGSETUP` USB disk (FAT12) is built at runtime from `/rigsetup/`. Edit the files in
+`pi/` and run from the repo root:
 
 ```bash
-python3 tools/gen_msc_image.py
+python3 tools/gen_rigsetup_h.py
 ```
 
-Commit the `pi/` changes together with the regenerated `msc_image.h`.
+Commit the `pi/` changes together with the regenerated `rigsetup_files.h`. Existing
+files in `/rigsetup/` are not overwritten — delete them on the Storage page (or replace
+them there) to pick up new firmware defaults.
 
 ## Web interface
 
@@ -192,7 +196,7 @@ Read this section plus [`docs/GUIDELINES.md`](docs/GUIDELINES.md) and
   reviewed and merged by the owner. Never push directly to `main`.
 - **Minimal changes:** read the affected code first, change only what is needed.
 - **Generated files — never edit by hand:** `terminal_html.h` (from
-  `gen_terminal_html.py`) and `msc_image.h` (from `pi/` via `tools/gen_msc_image.py`).
+  `gen_terminal_html.py`) and `rigsetup_files.h` (from `pi/` via `tools/gen_rigsetup_h.py`).
   `page_html.h`, `profiles_html.h` and `macros_html.h` are hand-edited.
 - **Hard rules:** no FitAddon (use `termFit()`); Quick Buttons are a vertical list;
   stop the web server only with `webServerStop()`; no `partitions.csv` in the sketch folder;

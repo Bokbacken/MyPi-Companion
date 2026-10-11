@@ -28,7 +28,7 @@ _Agreements and preferences for this project._
 
 ### Generated files (never edit by hand)
 - `terminal_html.h` ← `HMS_RigConsole_v5/gen_terminal_html.py`
-- `msc_image.h` ← `pi/` via `tools/gen_msc_image.py`
+- `rigsetup_files.h` ← `pi/` via `tools/gen_rigsetup_h.py`
 - Commit the source and the generated file together; CI fails if they differ.
 
 ## Hard technical rules
@@ -44,7 +44,7 @@ _Agreements and preferences for this project._
 - The AP is for laptop configuration (web UI) only.
 - Pi-side sources live in `pi/`. Change `rig_daemon.py` / `install.sh` only when the
   feature requires it, keep the serial protocol backward compatible where possible, and
-  always regenerate `msc_image.h` with `python3 tools/gen_msc_image.py` (CI checks it).
+  always regenerate `rigsetup_files.h` with `python3 tools/gen_rigsetup_h.py` (CI checks it).
 
 ### Web server
 - Starts in STA mode as well as AP mode.

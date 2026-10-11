@@ -1,7 +1,7 @@
 // ============================================================
 //  fat12_builder.ino — build the RIGSETUP FAT12 image at runtime
 //
-//  C++ port of tools/gen_msc_image.py.  Instead of baking the Pi
+//  C++ port of the former tools/gen_msc_image.py.  Instead of baking the Pi
 //  install files into flash, the image is assembled in PSRAM from
 //  the regular files found in /rigsetup/ on the FFat partition.
 //

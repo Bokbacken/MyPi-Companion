@@ -20,7 +20,7 @@ macro pool on FFat · base64-correct macros · `termFit()` · FFat file manageme
 - Web OTA fix (multipart), FFat fix (removed `partitions.csv`)
 - HID keyboard layout auto-detection; auto-connect after install
 - `STATUS:CONN`: real SSID on the display, NM connection name for switching
-- Pi-side sources in [`pi/`](../pi/) incl. `uninstall.sh`; `tools/gen_msc_image.py`
+- Pi-side sources in [`pi/`](../pi/) incl. `uninstall.sh`; `tools/gen_rigsetup_h.py`
 - GitHub Actions build (`arduino-cli`) with freshness checks for generated headers
 
 ---
@@ -46,7 +46,7 @@ click to run, Shift+click to "Add as macro", export txt/md.
 `/editor`, CodeMirror 6 (~80 KB gzip) or a minimal custom editor. Daemon reads the file →
 base64 over serial → browser; save goes back and the daemon writes with `sudo tee`.
 **Requires daemon changes** (now possible: edit `pi/rig_daemon.py`, regenerate
-`msc_image.h`, reinstall on the Pi).
+`rigsetup_files.h`, reinstall on the Pi).
 
 ### 5. File upload / download — medium
 Drag-and-drop upload, chunked base64 over WebSocket; download via daemon.

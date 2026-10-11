@@ -2,7 +2,7 @@
 //  littlefs_mgr.ino — FFat initialisation + HTTP file handlers
 //
 //  Uses ESP32 FFat (FAT over flash) with the predefined partition scheme:
-//    Arduino IDE → Tools → Partition Scheme → "16M Flash (2MB APP/12.5MB FATFS)"
+//    Arduino IDE → Tools → Partition Scheme → "16M Flash (3MB APP/9.9MB FATFS)"
 //  No custom partitions.csv — one in the sketch folder overrides the IDE scheme.
 //
 //  Routes registered in web_server.ino::startWebServer():
@@ -16,10 +16,15 @@
 //  Convention: config JSON files live under /config/ on FFat
 //  (/config/macros.json, /config/menus.json).  Legacy root-level
 //  copies are migrated once at boot by littleFsBegin().
+//  /rigsetup/ holds the files of the RIGSETUP USB disk; any file
+//  missing there is restored at boot from rigsetup_files.h
+//  (generated from pi/ by tools/gen_rigsetup_h.py).
 //
 //  `server` is declared in HMS_RigConsole_v4.ino and visible here
 //  because Arduino merges all .ino files into one compilation unit.
 // ============================================================
+
+#include "rigsetup_files.h"   // RIGSETUP_FILES[] — firmware defaults for /rigsetup/
 
 static bool _fatOk = false;   // set true only if FFat.begin() succeeds
 
@@ -69,6 +74,37 @@ static void _fsMigrate(const char *src, const char *dst) {
 //  littleFsBegin()  — called once from setup()
 //  (name kept so HMS_RigConsole_v4.ino needs no further change)
 // ============================================================
+// Populate /rigsetup/ from the compiled-in arrays: writes every file
+// that is missing (first boot, after an FFat format, or after the user
+// deleted it).  Existing files are left alone, so edits made via the
+// Storage page are kept.
+static void _ensureRigsetupFiles() {
+  if (!FFat.exists("/rigsetup")) FFat.mkdir("/rigsetup");
+  bool anyMissing = false;
+  for (size_t i = 0; i < RIGSETUP_FILE_COUNT; i++) {
+    char path[64];
+    snprintf(path, sizeof(path), "/rigsetup/%s", RIGSETUP_FILES[i].name);
+    if (!FFat.exists(path)) { anyMissing = true; break; }
+  }
+  if (!anyMissing) return;  // all files present
+  Serial.println("FFat: populating /rigsetup/ from firmware defaults");
+  for (size_t i = 0; i < RIGSETUP_FILE_COUNT; i++) {
+    char path[64];
+    snprintf(path, sizeof(path), "/rigsetup/%s", RIGSETUP_FILES[i].name);
+    if (FFat.exists(path)) continue;  // skip existing files
+    File f = FFat.open(path, FILE_WRITE);
+    if (!f) { Serial.printf("FFat: failed to create %s\n", path); continue; }
+    size_t w = f.write(RIGSETUP_FILES[i].data, RIGSETUP_FILES[i].size);
+    f.close();
+    if (w != RIGSETUP_FILES[i].size) {
+      Serial.printf("FFat: short write on %s — removed\n", path);
+      FFat.remove(path);
+      continue;
+    }
+    Serial.printf("FFat: wrote %s (%u bytes)\n", path, (unsigned)RIGSETUP_FILES[i].size);
+  }
+}
+
 void littleFsBegin() {
   // true = format partition on first use if blank/corrupt
   if (!FFat.begin(true)) {
@@ -86,6 +122,9 @@ void littleFsBegin() {
   // Migrate legacy root-level config files to /config/ (one-time, after OTA)
   _fsMigrate("/macros.json", "/config/macros.json");
   _fsMigrate("/menus.json",  "/config/menus.json");
+
+  // RIGSETUP install files
+  _ensureRigsetupFiles();
 }
 
 // ============================================================

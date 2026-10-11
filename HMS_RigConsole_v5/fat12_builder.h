@@ -1,6 +1,6 @@
 // ============================================================
 //  fat12_builder.h — build a FAT12 disk image in RAM from a
-//  directory on FFat (C++ port of tools/gen_msc_image.py).
+//  directory on FFat (C++ port of the former tools/gen_msc_image.py).
 //
 //  Layout (512-byte sectors, 1 sector per cluster):
 //    sector 0      boot sector  (volume label "RIGSETUP   ")
