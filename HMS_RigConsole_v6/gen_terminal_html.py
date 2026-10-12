@@ -343,10 +343,28 @@ function wsSendText(d) {
 
 function histPush(cmd) {
   if (!cmd || !cmd.trim()) return;
+  // Re-read the shared list so we never overwrite another tab's commands
+  try {
+    const fresh = JSON.parse(localStorage.getItem('cmdHist') || '[]');
+    if (Array.isArray(fresh)) cmdHist = fresh;
+  } catch (_) {}
   if (cmdHist[cmdHist.length - 1] !== cmd) cmdHist.push(cmd);
   if (cmdHist.length > HIST_MAX) cmdHist = cmdHist.slice(-HIST_MAX);
   try { localStorage.setItem('cmdHist', JSON.stringify(cmdHist)); } catch (_) {}
+  histIdx = cmdHist.length;  // always point past end after a push
 }
+
+// Sync command history when another tab appends a command
+window.addEventListener('storage', (e) => {
+  if (e.key !== 'cmdHist') return;
+  try {
+    const updated = JSON.parse(e.newValue || '[]');
+    if (Array.isArray(updated)) {
+      cmdHist = updated;
+      histIdx = cmdHist.length;  // reset navigation to end
+    }
+  } catch (_) {}
+});
 
 // Follow what the user types so Enter can record the command line.
 function histTrack(d) {
@@ -755,7 +773,8 @@ function saveSession() {
   const blob = new Blob([sessionLog], {type:'text/plain'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'session_'+new Date().toISOString().replace(/[:.]/g,'').slice(0,15)+'.txt';
+  const slotSuffix = sessSlot >= 0 ? '_' + (sessSlot + 1) : '';
+  a.download = 'session'+slotSuffix+'_'+new Date().toISOString().replace(/[:.]/g,'').slice(0,15)+'.txt';
   a.click(); showToast('Session saved', 2000);
 }
 
