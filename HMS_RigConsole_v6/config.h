@@ -55,10 +55,10 @@
 #define ADV_MENU_COUNT  6     // Advanced menu: AP, info, install, flip, AP on boot, back
 
 // Status bar text baselines (y offset from STATUS_TOP)
-#define SB_LINE1        4     // ESP SSID
-#define SB_LINE2       18     // ESP IP
-#define SB_LINE3       32     // Pi status
-#define SB_LINE4       46     // Pi active SSID / error
+#define SB_LINE1       15     // ESP SSID
+#define SB_LINE2       25     // ESP IP
+#define SB_LINE3       35     // Pi status
+#define SB_LINE4       45     // Pi active SSID / error
 
 // Touch tap zone
 #define TOUCH_X_MID   (SCREEN_W / 2)

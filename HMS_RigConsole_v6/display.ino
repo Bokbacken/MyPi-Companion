@@ -58,6 +58,24 @@ void drawHeader(const char *title) {
 void drawStatusBar() {
   gfx->fillRect(0, STATUS_TOP, SCREEN_W, STATUS_H, COL_STATUS_BG);
   gfx->drawFastHLine(0, STATUS_TOP, SCREEN_W, COL_ACCENT);
+
+  // UART 8N1 frame for 0x43 ('C', Companion): start, 8 data bits LSB first, stop.
+  // 10 bits x 17 px = 170 px, drawn as a green square wave above the text lines.
+  static const uint8_t WAVE_BITS[10] = {0, 1, 1, 0, 0, 0, 0, 1, 0, 1};
+  const int BIT_W = 17;
+  const int yHi = STATUS_TOP + 2;
+  const int yLo = STATUS_TOP + 12;
+  int prevY = WAVE_BITS[0] ? yHi : yLo;
+  for (int i = 0; i < 10; i++) {
+    int y  = WAVE_BITS[i] ? yHi : yLo;
+    int x0 = i * BIT_W;
+    if (y != prevY) {
+      gfx->drawFastVLine(x0, min(y, prevY), abs(y - prevY) + 1, 0x07E0);
+    }
+    gfx->drawFastHLine(x0, y, BIT_W, 0x07E0);
+    prevY = y;
+  }
+
   gfx->setTextSize(1);
 
   int y1 = STATUS_TOP + SB_LINE1;
