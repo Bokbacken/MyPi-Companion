@@ -737,7 +737,7 @@ void updateContentArea() {
   switch (currentState) {
 
     case STATE_STATUS:
-      drawHeader("HMS Rig Console");
+      drawHeader("MyPi Companion");
       drawHomeContent();
       drawTouchBar("MENU", "SELECT");
       break;

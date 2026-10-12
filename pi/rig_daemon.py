@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-HMS Rig Console — Raspberry Pi daemon  (rig_daemon.py)
+MyPi Companion — Raspberry Pi daemon  (rig_daemon.py)
 =======================================================
 Handles serial communication with the ESP32 front panel.
 
@@ -355,7 +355,7 @@ def scan_wifi(ser: serial.Serial) -> None:
 # ---------------------------------------------------------------------------
 # ESP32 USB disk (MSC) eject
 # ---------------------------------------------------------------------------
-ESP_MSC_VENDOR = "HMS"   # SCSI vendor ID reported by msc.ino
+ESP_MSC_VENDOR = "MyPi"   # SCSI vendor ID reported by msc.ino
 
 
 def _esp_msc_mounts() -> List[tuple]:
@@ -756,7 +756,7 @@ def handle_connection(ser: serial.Serial) -> None:
 # Main loop
 # ---------------------------------------------------------------------------
 def main() -> None:
-    log.info("HMS Rig Console daemon starting.")
+    log.info("MyPi Companion daemon starting.")
     log.info("Scanning for ESP32 on /dev/ttyACM* and /dev/ttyUSB* ...")
 
     while True:

@@ -25,7 +25,7 @@
 #include <ESPmDNS.h>
 
 // espSSID, espIP, espConnected, pendingPiInstall, espMenuIndex
-// are declared in HMS_RigConsole_v4.ino (the main .ino is
+// are declared in MyPi_Companion_V6.ino (the main .ino is
 // concatenated first, so all .ino files can see them).
 
 // -----------------------------------------------------------

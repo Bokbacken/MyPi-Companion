@@ -1,5 +1,5 @@
 // ============================================================
-//  display.ino — All draw functions for HMS Rig Console v4
+//  display.ino — All draw functions for MyPi Companion
 //
 //  Screen layout (portrait 172×320):
 //    y=  0.. 19   drawHeader()       — 20 px
@@ -536,7 +536,7 @@ void drawPiScanContent() {
 // Total wheel height = 2*20 + 32 + 2*20 = 132 px
 // Available from KB_WHEEL_TOP to CONTENT_TOP+CONTENT_H = 75..250 → 175 px ✓
 
-// Short tab labels  (must match KB_RANGES order in HMS_RigConsole_v4.ino)
+// Short tab labels  (must match KB_RANGES order in MyPi_Companion_V6.ino)
 static const char * const KB_TAB_NAMES[KB_RANGE_COUNT] = {
   "az", "AZ", "09", "S1", "S2", "In"
 };

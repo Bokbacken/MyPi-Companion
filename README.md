@@ -1,4 +1,4 @@
-# MyPi-Companion (HMS Rig Console)
+# MyPi-Companion
 
 ESP32-S3 touch companion for Raspberry Pi rigs: network/Wi-Fi configuration, a web-based
 serial terminal, and a GUI macro & menu editor — all served from the device itself.
@@ -15,7 +15,7 @@ known network. The everyday problems are always the same:
 - **Getting a shell on the Pi** when the network is down or unknown.
 - **Repeating the same admin commands** on many rigs, typed by hand every time.
 
-The HMS Rig Console solves this with a small touch device that is plugged into the Pi's USB
+MyPi Companion solves this with a small touch device that is plugged into the Pi's USB
 port. It needs nothing from the Pi's network: everything runs over the USB cable, and the
 device has its own Wi-Fi (station or access point) for the web interface on a laptop or phone.
 It can even install its own Pi-side helper software over USB — no internet, no SSH.
@@ -84,8 +84,8 @@ It can even install its own Pi-side helper software over USB — no internet, no
 
 ```
 MyPi-Companion/
-├── HMS_RigConsole_v6/        Arduino sketch folder (open the .ino in Arduino IDE)
-│   ├── HMS_RigConsole_v6.ino
+├── MyPi_Companion_V6/        Arduino sketch folder (open the .ino in Arduino IDE)
+│   ├── MyPi_Companion_V6.ino
 │   ├── gen_terminal_html.py  generator for terminal_html.h
 │   ├── rigsetup_files.h      generated from pi/ by tools/gen_rigsetup_h.py
 │   └── ...
@@ -125,14 +125,14 @@ Tools menu:
 | Flash Size | **16MB (128Mb)** |
 | Partition Scheme | **16M Flash (2MB APP/12.5MB FATFS)** |
 
-1. Open `HMS_RigConsole_v6/HMS_RigConsole_v6.ino`, set the Tools menu as above.
+1. Open `MyPi_Companion_V6/MyPi_Companion_V6.ino`, set the Tools menu as above.
 2. Compile & upload over USB.
 3. Later updates can be flashed from the web page `/update` (OTA) using the
    `.bin` from the CI build or from *Sketch → Export Compiled Binary*.
 
 > **The first v5 flash must be done over USB.** v5 changes the partition table
 > (the old `partitions.csv` was removed) and OTA cannot change the partition table.
-> Use `HMS_RigConsole_v6.ino.bin` for OTA — never `*.merged.bin` (that is a full
+> Use `MyPi_Companion_V6.ino.bin` for OTA — never `*.merged.bin` (that is a full
 > flash image for USB/esptool at address 0x0).
 
 ## Automatic build (GitHub Actions)
@@ -149,7 +149,7 @@ or if `rigsetup_files.h` is out of date with the files in `pi/`.
 and run:
 
 ```bash
-cd HMS_RigConsole_v6
+cd MyPi_Companion_V6
 python3 gen_terminal_html.py
 ```
 
@@ -191,7 +191,7 @@ See [`examples/README.md`](examples/README.md) — 58 Raspberry Pi macros in 5 m
 
 - **v6** (in progress) — v6.1: CLI/headless install mode (console login on Raspberry Pi
   OS Lite); offline pyserial fallback without pip; keyboard layout selectable on
-  `/installonpi`. Sketch folder renamed to `HMS_RigConsole_v6/`.
+  `/installonpi`. Sketch folder renamed to `MyPi_Companion_V6/`.
 - **v5** — GUI macro/menu editor at `/macros`; terminal menu links to it; fixed web OTA
   (multipart upload); removed `partitions.csv` so FFat mounts; keyboard layout
   auto-detection for Install on Pi; auto-connect after install; real SSID vs. NM
@@ -216,7 +216,7 @@ Read this section plus [`docs/GUIDELINES.md`](docs/GUIDELINES.md) and
   stop the web server only with `webServerStop()`; no `partitions.csv` in the sketch folder;
   `Serial.setRxBufferSize(4096)` before `Serial.begin()`.
 - **Flashing:** the first v5 flash must be over USB (partition table change); OTA uses
-  `HMS_RigConsole_v6.ino.bin`, never `*.merged.bin`.
+  `MyPi_Companion_V6.ino.bin`, never `*.merged.bin`.
 - **Naming pitfall:** on the ESP32, `activeSSID` is the real Wi-Fi SSID (for display) and
   `activeConn` is the NetworkManager connection name (for matching and `CMD:CONNECT`).
   The Pi profile list (`PROFILES:` / `piProfiles[].ssid`) contains NM connection names,

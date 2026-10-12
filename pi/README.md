@@ -24,7 +24,7 @@ After editing any file in this folder, regenerate the embedded file arrays:
 python3 tools/gen_rigsetup_h.py
 ```
 
-This updates `HMS_RigConsole_v6/rigsetup_files.h`.  Commit both the source files
+This updates `MyPi_Companion_V6/rigsetup_files.h`.  Commit both the source files
 and the regenerated header together.  Files already present in `/rigsetup/` on the
 device are not overwritten; delete them on the Storage page to restore the new
 defaults on the next boot.

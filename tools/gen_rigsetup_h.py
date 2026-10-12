@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-gen_rigsetup_h.py — generate HMS_RigConsole_v6/rigsetup_files.h from pi/.
+gen_rigsetup_h.py — generate MyPi_Companion_V6/rigsetup_files.h from pi/.
 
 Usage (from the repo root):
     python3 tools/gen_rigsetup_h.py
@@ -26,7 +26,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PI_DIR    = REPO_ROOT / "pi"
-OUTPUT_H  = REPO_ROOT / "HMS_RigConsole_v6" / "rigsetup_files.h"
+OUTPUT_H  = REPO_ROOT / "MyPi_Companion_V6" / "rigsetup_files.h"
 
 SKIP_NAMES    = {"README.md"}
 SKIP_SUFFIXES = {".pyc", ".pyo"}

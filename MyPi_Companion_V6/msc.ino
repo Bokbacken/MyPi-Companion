@@ -226,7 +226,7 @@ bool mscBackendIsSD()       { return msc_backend == MSC_BACKEND_SD; }
 //  Call once in setup(), before hidBegin().
 
 void mscBegin() {
-  MSC.vendorID("HMS");
+  MSC.vendorID("MyPi");
   MSC.productID("RigSetup");
   MSC.productRevision("1.0");
   MSC.onRead(on_msc_read);

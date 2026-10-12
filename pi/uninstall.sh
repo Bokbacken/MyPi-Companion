@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-#  HMS Rig Console — Pi-side uninstaller
+#  MyPi Companion — Pi-side uninstaller
 #
 #  Removes the rig-console daemon, its systemd service, and
 #  the installed files. Leaves the dialout group membership and
@@ -23,7 +23,7 @@ for arg in "$@"; do
   [[ "$arg" == "--purge" ]] && PURGE=true
 done
 
-echo "=== HMS Rig Console — Uninstallation ==="
+echo "=== MyPi Companion — Uninstallation ==="
 echo "    Install dir : $INSTALL_DIR"
 echo "    Purge       : $PURGE"
 echo ""

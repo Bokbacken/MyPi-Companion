@@ -25,7 +25,7 @@ static const char MACROS_HTML[] PROGMEM = R"MACROHTML(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HMS Rig Console — Macro Editor</title>
+<title>MyPi Companion — Macro Editor</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -214,7 +214,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
 
 <!-- Toolbar -->
 <div id="tb">
-  <span class="logo">⚡ HMS Rig — Macro Editor</span>
+  <span class="logo">⚡ MyPi Companion — Macro Editor</span>
   <a href="/terminal">← Terminal</a>
   <span class="sp"></span>
   <span id="st">Laddar...</span>

@@ -1,6 +1,6 @@
 #pragma once
 // ============================================================
-//  HMS Rig Console — Hardware / Layout Configuration  (v6)
+//  MyPi Companion — Hardware / Layout Configuration  (v6)
 //  Target: Waveshare ESP32-S3-Touch-LCD-1.47
 //          JD9853 display  172×320 portrait
 //          AXS5106L capacitive touch  (I2C, addr 0x63)
@@ -82,7 +82,7 @@
 //  AP credentials
 // -----------------------------------------------------------
 #define AP_SSID_STR  "RigSetup"
-#define AP_PASS_STR  "hms12345"
+#define AP_PASS_STR  "MyPi1234"
 
 // NVS keys (namespace "rigcfg")
 #define NVS_KEY_AP_BOOT   "ap_boot"   // bool: start AP automatically on boot
