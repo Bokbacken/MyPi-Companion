@@ -29,33 +29,36 @@
 //  Screen geometry  (portrait 172×320)
 //
 //   y=  0.. 19   Header bar      (20 px)
-//   y= 20..249   Content area   (230 px)  — menus / info
-//   y=250..299   Status bar      (50 px)  — 3 info lines
+//   y= 20..235   Content area   (216 px)  — menus / info
+//   y=236..299   Status bar      (64 px)  — 4 info lines
 //   y=300..319   Touch bar       (20 px)  — NEXT | SELECT
 //
 //  Status bar lines:
-//    line 1 (y=254): ESP SSID + IP
-//    line 2 (y=268): Pi status + Pi SSID
-//    line 3 (y=282): Pi port / error message
+//    line 1 (y=240): ESP SSID
+//    line 2 (y=254): ESP IP address
+//    line 3 (y=268): Pi status
+//    line 4 (y=282): Pi active SSID / error message
 // -----------------------------------------------------------
 #define SCREEN_W      172
 #define SCREEN_H      320
 
 #define HDR_H          20
 #define CONTENT_TOP    20
-#define CONTENT_H     230     // (was 255) — reduced to give status 3 lines
-#define STATUS_TOP    250     // first pixel of status bar
-#define STATUS_H       50     // 3 lines x 14 px + padding
+#define CONTENT_H     216     // (was 230) — reduced to give status 4 lines
+#define STATUS_TOP    236     // first pixel of status bar
+#define STATUS_H       64     // 4 lines x 14 px + padding
 #define TOUCH_TOP     300
 #define TOUCH_H        20
 
 // Compact menu row — single-line text + minimal padding
 #define MENU_ROW_H     18     // 8 px text + 5 px top + 5 px bottom
+#define ADV_MENU_COUNT  6     // Advanced menu: AP, info, install, flip, AP on boot, back
 
 // Status bar text baselines (y offset from STATUS_TOP)
-#define SB_LINE1        4     // ESP SSID/IP
-#define SB_LINE2       18     // Pi status
-#define SB_LINE3       32     // Pi SSID / error
+#define SB_LINE1        4     // ESP SSID
+#define SB_LINE2       18     // ESP IP
+#define SB_LINE3       32     // Pi status
+#define SB_LINE4       46     // Pi active SSID / error
 
 // Touch tap zone
 #define TOUCH_X_MID   (SCREEN_W / 2)
@@ -80,6 +83,9 @@
 // -----------------------------------------------------------
 #define AP_SSID_STR  "RigSetup"
 #define AP_PASS_STR  "hms12345"
+
+// NVS keys (namespace "rigcfg")
+#define NVS_KEY_AP_BOOT   "ap_boot"   // bool: start AP automatically on boot
 
 // -----------------------------------------------------------
 //  Serial polling / offline detection

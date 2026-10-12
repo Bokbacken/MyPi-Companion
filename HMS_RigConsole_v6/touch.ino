@@ -371,7 +371,7 @@ void menuNext() {
       break;
 
     case STATE_ADVANCED:
-      advMenuIndex = (advMenuIndex + 1) % 5;
+      advMenuIndex = (advMenuIndex + 1) % ADV_MENU_COUNT;
       updateContentArea();
       break;
 
@@ -433,7 +433,7 @@ void menuPrev() {
       break;
 
     case STATE_ADVANCED:
-      advMenuIndex = (advMenuIndex + 4) % 5;
+      advMenuIndex = (advMenuIndex + ADV_MENU_COUNT - 1) % ADV_MENU_COUNT;
       updateContentArea();
       break;
 
@@ -606,6 +606,12 @@ void doSelect() {
         { Preferences _p; _p.begin("rigcfg", false);
           _p.putBool("flip", displayFlipped); _p.end(); }
         gfx->fillScreen(COL_BG);
+        updateContentArea();
+      } else if (advMenuIndex == 4) {
+        // ── AP on boot toggle (persisted in NVS) ───────────────
+        apOnBoot = !apOnBoot;
+        { Preferences _p; _p.begin("rigcfg", false);
+          _p.putBool(NVS_KEY_AP_BOOT, apOnBoot); _p.end(); }
         updateContentArea();
       } else {
         goBack();

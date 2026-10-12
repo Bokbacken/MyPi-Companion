@@ -3,14 +3,15 @@
 //
 //  Screen layout (portrait 172×320):
 //    y=  0.. 19   drawHeader()       — 20 px
-//    y= 20..249   content area       — 230 px  (MENU_ROW_H=18)
-//    y=250..299   drawStatusBar()    — 50 px   (3 lines)
+//    y= 20..235   content area       — 216 px  (MENU_ROW_H=18)
+//    y=236..299   drawStatusBar()    — 64 px   (4 lines)
 //    y=300..319   drawTouchBar()     — 20 px
 //
 //  Status bar lines:
-//    SB_LINE1 (y=254)  ESP Wi-Fi SSID + IP
-//    SB_LINE2 (y=268)  Pi online/offline + Pi active SSID
-//    SB_LINE3 (y=282)  USB port / error detail
+//    SB_LINE1 (y=240)  ESP Wi-Fi SSID
+//    SB_LINE2 (y=254)  ESP IP address
+//    SB_LINE3 (y=268)  Pi online/offline
+//    SB_LINE4 (y=282)  Pi active SSID / error detail
 // ============================================================
 
 // ── Text helpers ─────────────────────────────────────────────
@@ -52,7 +53,7 @@ void drawHeader(const char *title) {
 
 
 // ============================================================
-//  STATUS BAR  — 3 lines, 50 px total
+//  STATUS BAR  — 4 lines, 64 px total
 // ============================================================
 void drawStatusBar() {
   gfx->fillRect(0, STATUS_TOP, SCREEN_W, STATUS_H, COL_STATUS_BG);
@@ -62,41 +63,49 @@ void drawStatusBar() {
   int y1 = STATUS_TOP + SB_LINE1;
   int y2 = STATUS_TOP + SB_LINE2;
   int y3 = STATUS_TOP + SB_LINE3;
+  int y4 = STATUS_TOP + SB_LINE4;
 
-  // ── Line 1: ESP Wi-Fi ────────────────────────────────────
+  // ── Line 1: ESP Wi-Fi SSID ───────────────────────────────
   if (espConnected) {
-    char wfBuf[28];
-    snprintf(wfBuf, sizeof(wfBuf), "%.12s  %.15s", espSSID, espIP);
-    drawTxt(wfBuf, 4, y1, COL_ACTIVE, COL_STATUS_BG);
+    char ssBuf[22];
+    truncate(ssBuf, espSSID, 21);
+    drawTxt(ssBuf, 4, y1, COL_ACTIVE, COL_STATUS_BG);
   } else {
     drawTxt("ESP: no Wi-Fi", 4, y1, COL_DIM, COL_STATUS_BG);
   }
 
-  // ── Line 2: Pi status ────────────────────────────────────
-  if (piConnected) {
-    drawTxt("Pi: ", 4, y2, COL_DIM, COL_STATUS_BG);
-    char ssBuf[22];
-    truncate(ssBuf, activeSSID, 21);
-    drawTxt(ssBuf, 28, y2, COL_ACTIVE, COL_STATUS_BG);
+  // ── Line 2: ESP IP address ───────────────────────────────
+  if (espConnected) {
+    drawTxt(espIP, 4, y2, COL_DIM, COL_STATUS_BG);
   } else {
-    drawTxt("Pi: offline", 4, y2, COL_ERR, COL_STATUS_BG);
+    drawTxt("---", 4, y2, COL_DIM, COL_STATUS_BG);
   }
 
-  // ── Line 3: Pi IP or error ───────────────────────────────
+  // ── Line 3: Pi status ────────────────────────────────────
+  if (piConnected) {
+    drawTxt("Pi: ", 4, y3, COL_DIM, COL_STATUS_BG);
+    char ssBuf[22];
+    truncate(ssBuf, activeSSID, 21);
+    drawTxt(ssBuf, 28, y3, COL_ACTIVE, COL_STATUS_BG);
+  } else {
+    drawTxt("Pi: offline", 4, y3, COL_ERR, COL_STATUS_BG);
+  }
+
+  // ── Line 4: Pi IP / error / hint ─────────────────────────
   if (hasError) {
     char errBuf[24];
     truncate(errBuf, lastErrMsg, 23);
-    drawTxt(errBuf, 4, y3, COL_ERR, COL_STATUS_BG);
+    drawTxt(errBuf, 4, y4, COL_ERR, COL_STATUS_BG);
   } else if (hasInfo) {
     char infoBuf[24];
     truncate(infoBuf, infoMsg, 23);
-    drawTxt(infoBuf, 4, y3, COL_ACCENT, COL_STATUS_BG);
+    drawTxt(infoBuf, 4, y4, COL_ACCENT, COL_STATUS_BG);
   } else if (piConnected) {
     char ipBuf[24];
     truncate(ipBuf, activeIP, 23);
-    drawTxt(ipBuf, 4, y3, COL_DIM, COL_STATUS_BG);
+    drawTxt(ipBuf, 4, y4, COL_DIM, COL_STATUS_BG);
   } else {
-    drawTxt("Connect Pi via USB", 4, y3, COL_DIM, COL_STATUS_BG);
+    drawTxt("Connect Pi via USB", 4, y4, COL_DIM, COL_STATUS_BG);
   }
 }
 
@@ -629,17 +638,19 @@ void drawEspKbContent() {
 
 
 // ============================================================
-//  ADVANCED SUB-MENU  (5 items, compact)
+//  ADVANCED SUB-MENU  (6 items, compact)
 // ============================================================
 void drawAdvancedMenuContent() {
-  static const MenuItem items[] = {
+  const MenuItem items[ADV_MENU_COUNT] = {
     { "Start AP",         COL_TEXT },
     { "Show info",        COL_TEXT },
     { "Install on Pi",    COL_TEXT },
     { "Flip display",     COL_TEXT },
+    { apOnBoot ? "AP on boot  [ON]" : "AP on boot  [OFF]",
+      apOnBoot ? COL_ACTIVE : COL_DIM },
     { "<- Back",          COL_DIM  },
   };
-  drawMenuList(items, 5, advMenuIndex, 0);
+  drawMenuList(items, ADV_MENU_COUNT, advMenuIndex, 0);
 }
 
 
