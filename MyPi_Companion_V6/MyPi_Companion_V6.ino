@@ -1,5 +1,5 @@
 // ============================================================
-//  HMS Rig Console — Firmware v6
+//  MyPi Companion — Firmware v6
 //  Waveshare ESP32-S3-Touch-LCD-1.47
 //  Portrait 172×320 | JD9853 (via Arduino_GFX) | AXS5106L touch
 // ============================================================
@@ -17,7 +17,7 @@
 //    config.h              — pins, geometry, colours, structs, enum
 //    jd9853_init.h         — JD9853-specific register init
 //    touch_axs5106l.h      — AXS5106L I2C touch driver (header-only)
-//    HMS_RigConsole_v6.ino — includes, globals, setup, loop, splash
+//    MyPi_Companion_V6.ino — includes, globals, setup, loop, splash
 //    display.ino           — all draw*() functions  (Arduino_GFX)
 //    touch.ino             — handleTouch, dispatchAction, pollWifiScan
 //    protocol.ino          — handleSerial, processMsg, wsEvent
@@ -363,7 +363,7 @@ void setup() {
   gfx->fillScreen(COL_BG);
 
   // ---- Home screen -----------------------------------------
-  drawHeader("HMS Rig Console");
+  drawHeader("MyPi Companion");
   drawStatusBar();         // Reflects ESP SSID/IP if connected
   drawTouchBar("MENU", "SELECT");
   drawHomeContent();

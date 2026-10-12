@@ -81,5 +81,5 @@ hdr = ("// ============================================================\n"
        "//  Format: RGB565, PROGMEM\n"
        "// ============================================================\n"
        "#pragma once\n#include <pgmspace.h>\n\n")
-open(os.path.join(ROOT, "HMS_RigConsole_v6", "logo_bitmaps.h"), "w").write(hdr + c_arr(splash, "logo_splash") + "\n\n" + c_arr(icon, "logo_icon") + "\n")
+open(os.path.join(ROOT, "MyPi_Companion_V6", "logo_bitmaps.h"), "w").write(hdr + c_arr(splash, "logo_splash") + "\n\n" + c_arr(icon, "logo_icon") + "\n")
 print("icon", icon.size)

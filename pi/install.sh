@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-#  HMS Rig Console v4 — Pi-side installer
+#  MyPi Companion — Pi-side installer
 #
 #  Usage (manual):   sudo bash install.sh
 #  Usage (via HID):  sudo bash /media/<user>/RIGSETUP/install.sh /dev/ttyACMx
@@ -43,7 +43,7 @@ fb() {
   fi
 }
 
-echo "=== HMS Rig Console — Installation ==="
+echo "=== MyPi Companion — Installation ==="
 echo "    Install user : $RUN_USER"
 echo "    Install dir  : $INSTALL_DIR"
 echo ""
@@ -165,7 +165,7 @@ echo "[5/6] Installing systemd service..."
 
 cat > /etc/systemd/system/${SERVICE_DAEMON}.service << SVCEOF
 [Unit]
-Description=HMS Rig Console Daemon
+Description=MyPi Companion Daemon
 # NOTE: BindsTo is intentionally omitted.
 #   BindsTo=dev-ttyACM0.device would cause systemd to kill the service
 #   the moment the USB device re-enumerates or disconnects — preventing
@@ -202,7 +202,7 @@ echo "[6/6] Installing polkit rule..."
 fb "RIG:INSTALL_POLKIT"
 mkdir -p /etc/polkit-1/localauthority/50-local.d /etc/polkit-1/rules.d
 cat > /etc/polkit-1/localauthority/50-local.d/rig-console-nmcli.pkla << PKLAEOF
-[HMS Rig Console — nmcli without password]
+[MyPi Companion — nmcli without password]
 Identity=unix-user:$RUN_USER
 Action=org.freedesktop.NetworkManager.*
 ResultAny=yes

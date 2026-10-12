@@ -5,7 +5,7 @@ static const char PROFILES_HTML[] PROGMEM = R"PHTML(
 <html><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HMS Rig Console — Profiles</title>
+<title>MyPi Companion — Profiles</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,sans-serif;background:#0d1117;color:#e6e6e6;max-width:520px;margin:0 auto}
@@ -96,7 +96,7 @@ footer{text-align:center;padding:14px;font-size:11px;color:#484f58}
 </div>
 
 <div class="msg" id="msg"></div>
-<footer>HMS Rig Console &bull; Profile Manager &bull; 192.168.4.1</footer>
+<footer>MyPi Companion &bull; Profile Manager &bull; 192.168.4.1</footer>
 
 <script>
 var isDhcp=true;

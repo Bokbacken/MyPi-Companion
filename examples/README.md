@@ -1,4 +1,4 @@
-# HMS Rig Console v5 — Example Macros for Raspberry Pi
+# MyPi Companion — Example Macros for Raspberry Pi
 
 58 macros in 5 menu groups. Import them via the GUI editor (`/macros`).
 

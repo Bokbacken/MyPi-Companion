@@ -25,7 +25,7 @@ static const char STORAGE_HTML[] PROGMEM = R"STORAGEHTML(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HMS Rig Console — Storage</title>
+<title>MyPi Companion — Storage</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -85,7 +85,7 @@ ul.files{list-style:none;font-family:var(--mono);font-size:12px;color:var(--mute
 </head>
 <body>
 <nav>
-  <span class="logo">⚡ HMS Rig</span>
+  <span class="logo">⚡ MyPi Companion</span>
   <a href="/">Home</a>
   <a href="/macros">Macros</a>
   <a href="/terminal">Terminal</a>

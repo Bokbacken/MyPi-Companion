@@ -20,7 +20,7 @@
 //  missing there is restored at boot from rigsetup_files.h
 //  (generated from pi/ by tools/gen_rigsetup_h.py).
 //
-//  `server` is declared in HMS_RigConsole_v4.ino and visible here
+//  `server` is declared in MyPi_Companion_V6.ino and visible here
 //  because Arduino merges all .ino files into one compilation unit.
 // ============================================================
 
@@ -72,7 +72,7 @@ static void _fsMigrate(const char *src, const char *dst) {
 
 // ============================================================
 //  littleFsBegin()  — called once from setup()
-//  (name kept so HMS_RigConsole_v4.ino needs no further change)
+//  (name kept so MyPi_Companion_V6.ino needs no further change)
 // ============================================================
 // Populate /rigsetup/ from the compiled-in arrays: writes every file
 // that is missing (first boot, after an FFat format, or after the user
