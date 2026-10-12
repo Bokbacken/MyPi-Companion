@@ -4,7 +4,7 @@
 
 // ============================================================
 //  DASHBOARD (main page)
-//  - HMS logo banner
+//  - MyPi Companion logo banner
 //  - Live status card (Pi + ESP)
 //  - 3×2 navigation button grid
 // ============================================================
@@ -12,7 +12,7 @@ static const char PAGE_TMPL[] PROGMEM = R"html(<!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HMS Rig Console</title>
+<title>MyPi Companion</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,sans-serif;background:#0d1117;color:#e6e6e6;max-width:480px;margin:0 auto}
@@ -33,7 +33,7 @@ body{font-family:Arial,sans-serif;background:#0d1117;color:#e6e6e6;max-width:480
 footer{text-align:center;padding:12px;font-size:11px;color:#484f58}
 </style></head><body>
 <div class="hdr">
-<div><small>HMS Networks</small><h1>Rig Console</h1></div>
+<img src="/logo.png" alt="MyPi"><h1>MyPi Companion</h1>
 </div>
 <div class="card">
 <div class="lbl">Pi network</div>
@@ -55,7 +55,7 @@ footer{text-align:center;padding:12px;font-size:11px;color:#484f58}
 <a class="gbtn" href="/info"><span class="ic">ℹ️</span><span class="tx">System Info</span></a>
 <a class="gbtn" href="/ap-profiles"><span class="ic">🔌</span><span class="tx">AP Profiles</span></a>
 </div>
-<footer>HMS Rig Console &bull; rigconsole.local</footer>
+<footer>MyPi Companion &bull; rigconsole.local</footer>
 <script>
 function poll(){
   fetch('/status').then(r=>r.json()).then(function(d){
@@ -81,7 +81,7 @@ static const char NETWORKS_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pi Networks — HMS Rig Console</title>
+<title>Pi Networks — MyPi Companion</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,sans-serif;background:#0d1117;color:#e6e6e6;max-width:480px;margin:0 auto}
@@ -107,7 +107,7 @@ input{width:100%;padding:9px;border-radius:6px;border:1px solid #30363d;backgrou
 footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 </style></head><body>
 <div class="hdr">
-<div><a class="back" href="/">← Dashboard</a><h1>Pi Networks</h1></div>
+<img src="/logo.png" alt="MyPi"><div><a class="back" href="/">← Dashboard</a><h1>Pi Networks</h1></div>
 </div>
 <div class="card">
 <div class="lbl">Active Pi network</div>
@@ -127,7 +127,7 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 </form>
 </div>
 <div class="msg" id="msg"></div>
-<footer><a href="/" style="color:#484f58">HMS Rig Console</a></footer>
+<footer><a href="/" style="color:#484f58">MyPi Companion</a></footer>
 <script>
 var polling=true,curSsid='',curConn='';
 function showMsg(t,e){var m=document.getElementById('msg');m.textContent=t;m.className='msg'+(e?' err':'');m.style.display='block';}
@@ -188,7 +188,7 @@ static const char INSTALLPI_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Install on Pi — HMS Rig Console</title>
+<title>Install on Pi — MyPi Companion</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,sans-serif;background:#0d1117;color:#e6e6e6;max-width:480px;margin:0 auto}
@@ -212,12 +212,12 @@ ul{font-size:13px;color:#8b949e;padding-left:18px;margin-bottom:14px;line-height
 footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 </style></head><body>
 <div class="hdr">
-<div><a class="back" href="/">← Dashboard</a><h1>Install on Pi</h1></div>
+<img src="/logo.png" alt="MyPi"><div><a class="back" href="/">← Dashboard</a><h1>Install on Pi</h1></div>
 </div>
 <div class="card">
 <span class="ic">📦</span>
-<h2>Rig Console daemon installer</h2>
-<p>Installs the HMS Rig Console daemon on the connected Raspberry Pi via USB HID keyboard emulation.</p>
+<h2>MyPi Companion daemon installer</h2>
+<p>Installs the MyPi Companion daemon on the connected Raspberry Pi via USB HID keyboard emulation.</p>
 <div class="seg">
 <label><input type="radio" name="mode" value="desktop" checked onchange="upd()"> 🖥️ Desktop</label>
 <label><input type="radio" name="mode" value="cli" onchange="upd()"> ⌨️ CLI / headless</label>
@@ -250,7 +250,7 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 <button class="btn" id="btn" onclick="install()">Install / Reinstall on Pi</button>
 <div class="msg" id="msg"></div>
 </div>
-<footer><a href="/" style="color:#484f58">HMS Rig Console</a></footer>
+<footer><a href="/" style="color:#484f58">MyPi Companion</a></footer>
 <script>
 function $(i){return document.getElementById(i);}
 function mode(){return document.querySelector('input[name=mode]:checked').value;}
@@ -291,7 +291,7 @@ static const char SYSINFO_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>System Info — HMS Rig Console</title>
+<title>System Info — MyPi Companion</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,sans-serif;background:#0d1117;color:#e6e6e6;max-width:480px;margin:0 auto}
@@ -313,7 +313,7 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 .ts{font-size:10px;color:#484f58;text-align:right;margin:0 12px 4px}
 </style></head><body>
 <div class="hdr">
-<div><a class="back" href="/">← Dashboard</a><h1>System Info</h1></div>
+<img src="/logo.png" alt="MyPi"><div><a class="back" href="/">← Dashboard</a><h1>System Info</h1></div>
 </div>
 <div class="ts" id="ts">Updating...</div>
 <div class="card">
@@ -333,7 +333,7 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 <div class="row"><span class="k">ESP network</span><span class="v" id="esp-ssid">---</span></div>
 <div class="row"><span class="k">ESP IP</span><span class="v" id="esp-ip">---</span></div>
 </div>
-<footer><a href="/" style="color:#484f58">HMS Rig Console</a></footer>
+<footer><a href="/" style="color:#484f58">MyPi Companion</a></footer>
 <script>
 function fmtUptime(ms){
   var s=Math.floor(ms/1000),m=Math.floor(s/60),h=Math.floor(m/60);
@@ -377,7 +377,7 @@ static const char OTA_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OTA Update — HMS Rig Console</title>
+<title>OTA Update — MyPi Companion</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,sans-serif;background:#0d1117;color:#e6e6e6;max-width:480px;margin:0 auto;padding:0}
@@ -400,7 +400,7 @@ progress{width:100%;height:20px;border-radius:4px}
 footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 </style></head><body>
 <div class="hdr">
-<div><a class="back" href="/">← Dashboard</a><h1>OTA Update</h1></div>
+<img src="/logo.png" alt="MyPi"><div><a class="back" href="/">← Dashboard</a><h1>OTA Update</h1></div>
 </div>
 <div class="card">
 <label>Select compiled firmware (.bin):</label>
@@ -414,7 +414,7 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 </div>
 <div id="result"></div>
 </div>
-<footer><a href="/" style="color:#484f58">HMS Rig Console</a></footer>
+<footer><a href="/" style="color:#484f58">MyPi Companion</a></footer>
 <script>
 document.getElementById('upf').onsubmit=function(e){
   e.preventDefault();

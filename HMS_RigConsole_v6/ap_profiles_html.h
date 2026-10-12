@@ -18,7 +18,7 @@ static const char AP_PROFILES_HTML[] PROGMEM = R"html(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HMS Rig Console — AP Profiles</title>
+<title>MyPi Companion — AP Profiles</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{background:#0d1117;color:#e6e6e6;font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px}
@@ -53,7 +53,7 @@ button.primary{background:#F47B20;border-color:#F47B20;color:#000}
 </style>
 </head>
 <body>
-<header><a href="/" title="Back">&#8592;</a><h1>HMS Rig Console — AP Profiles</h1></header>
+<header><a href="/" title="Back">&#8592;</a><img src="/logo.png" alt="MyPi" style="height:30px;vertical-align:middle;margin:0 8px"><h1>AP Profiles</h1></header>
 <main id="cards">
 <div class="diag" id="diag"><h2><span>NAT / uplink status</span><button onclick="loadStatus(true)">Test uplink</button></h2><table id="diagTbl"><tr><td>Loading…</td></tr></table></div>
 <p class="note">Starting an AP from here restarts the Wi-Fi access point. If you are connected through the AP, reconnect to the new SSID afterwards. NAT shares the ESP's Wi-Fi (STA) internet with AP clients and only works while the ESP is connected to a network.</p>

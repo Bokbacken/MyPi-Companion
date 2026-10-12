@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 gen_terminal_html.py
-Generate terminal_html.h for HMS Rig Console v4.
+Generate terminal_html.h for MyPi Companion.
 NOTE: No FitAddon — sizing handled via termFit() DOM measurement.
 """
 import os
@@ -18,7 +18,7 @@ HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HMS Rig Console</title>
+<title>MyPi Companion</title>
 <link rel="stylesheet" href="/xterm.css">
 <script src="/xterm.js"></script>
 <style>
@@ -415,7 +415,7 @@ function wsConnect() {
       ? new TextDecoder().decode(e.data) : String(e.data);
     if (raw.startsWith('SESS:')) {
       sessSlot = parseInt(raw.slice(5), 10);
-      document.title = 'Terminal #' + (sessSlot + 1) + ' \u2014 HMS Rig Console';
+      document.title = 'Terminal #' + (sessSlot + 1) + ' \u2014 MyPi Companion';
       return;
     }
     if (raw === 'ERR:SESSION_FULL') {
