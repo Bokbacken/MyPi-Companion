@@ -45,9 +45,10 @@ void drawHeader(const char *title) {
   gfx->fillRect(0, 0, SCREEN_W, HDR_H, COL_HDR_BG);
   gfx->drawFastHLine(0, HDR_H - 1, SCREEN_W, COL_ACCENT);
   gfx->setTextSize(1);
-  drawTxt(title, LOGO_ICON_W + 4, 6, COL_HDR_TXT, COL_HDR_BG);
+  drawTxt(title, 4, 6, COL_HDR_TXT, COL_HDR_BG);
+  int cx = SCREEN_W - LOGO_ICON_W - 4;   // 4 px right margin for rounded corner
   int cy = (HDR_H - LOGO_ICON_H) / 2;
-  drawProgmemImage(1, cy, LOGO_ICON_W, LOGO_ICON_H, logo_icon);
+  drawProgmemImage(cx, cy, LOGO_ICON_W, LOGO_ICON_H, logo_icon);
 }
 
 
