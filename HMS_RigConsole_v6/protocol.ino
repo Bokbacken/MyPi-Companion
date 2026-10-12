@@ -221,11 +221,15 @@ void processMsg(const String& msg) {
   if (msg == "OK:MSC_EJECT")          { mscOnHostEjectReply(true, "");               return; }
   if (msg.startsWith("ERR:MSC_EJECT")) { mscOnHostEjectReply(false, msg.substring(14)); return; }
 
-  // TERM:OUT:<base64> — PTY output from Pi → WebSocket client
+  // TERM:OUT:<slot>:<base64> — PTY output from Pi -> correct WebSocket client
   if (msg.startsWith("TERM:OUT:")) {
-    if (termWsClient >= 0) {
-      String b64 = msg.substring(9);
-      wsServer.sendTXT((uint8_t)termWsClient, b64);
+    int p = 9;
+    int colon = msg.indexOf(':', p);
+    if (colon < 0) return;
+    int slot = msg.substring(p, colon).toInt();
+    if (slot >= 0 && slot < MAX_TERM_SESSIONS && termSlotClient[slot] >= 0) {
+      String b64 = msg.substring(colon + 1);   // sendTXT needs a non-const String&
+      wsServer.sendTXT((uint8_t)termSlotClient[slot], b64);
     }
     return;
   }
@@ -235,24 +239,49 @@ void processMsg(const String& msg) {
 // ============================================================
 //  WEBSOCKET EVENT  (terminal bridge)
 // ============================================================
+// ── Slot helpers ──────────────────────────────────────────
+static int8_t _slotForClient(uint8_t num) {
+  for (int i = 0; i < MAX_TERM_SESSIONS; i++)
+    if (termSlotClient[i] == (int8_t)num) return (int8_t)i;
+  return -1;
+}
+static int8_t _freeSlot() {
+  for (int i = 0; i < MAX_TERM_SESSIONS; i++)
+    if (termSlotClient[i] == -1) return (int8_t)i;
+  return -1;
+}
+
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
   if (type == WStype_CONNECTED) {
-    termWsClient = (int)num;
-    Serial.println("CMD:TERM_OPEN");
-  } else if (type == WStype_DISCONNECTED) {
-    if (termWsClient == (int)num) {
-      termWsClient = -1;
-      Serial.println("CMD:TERM_CLOSE");
+    int8_t slot = _freeSlot();
+    if (slot < 0) {
+      // All sessions taken — reject and close
+      wsServer.sendTXT(num, "ERR:SESSION_FULL");
+      wsServer.disconnect(num);
+      return;
     }
+    termSlotClient[slot] = (int8_t)num;
+    String sess = String("SESS:") + slot;
+    wsServer.sendTXT(num, sess);
+    Serial.println(String("CMD:TERM_OPEN:") + slot);
+
+  } else if (type == WStype_DISCONNECTED) {
+    int8_t slot = _slotForClient(num);
+    if (slot >= 0) {
+      termSlotClient[slot] = -1;
+      Serial.println(String("CMD:TERM_CLOSE:") + slot);
+    }
+
   } else if (type == WStype_TEXT) {
+    int8_t slot = _slotForClient(num);
+    if (slot < 0) return;
     String data = String((char*)payload);
-    if (data.startsWith("CTL:")) {
-      // Control message (e.g. CTL:RESIZE:cols:rows) — pass through as-is
-      Serial.println(data);
+    if (data.startsWith("CTL:RESIZE:")) {
+      // CTL:RESIZE:cols:rows -> CTL:RESIZE:<slot>:cols:rows
+      Serial.println(String("CTL:RESIZE:") + slot + ":" + data.substring(11));
     } else {
-      // Base64-encoded keystrokes → TERM:IN:<base64>
-      Serial.print("TERM:IN:");
-      Serial.println(data);
+      // Base64 keystrokes -> TERM:IN:<slot>:<b64>
+      Serial.println(String("TERM:IN:") + slot + ":" + data);
     }
   }
 }

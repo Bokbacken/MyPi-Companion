@@ -1,6 +1,6 @@
 #pragma once
 // ============================================================
-//  HMS Rig Console — Hardware / Layout Configuration  (v5)
+//  HMS Rig Console — Hardware / Layout Configuration  (v6)
 //  Target: Waveshare ESP32-S3-Touch-LCD-1.47
 //          JD9853 display  172×320 portrait
 //          AXS5106L capacitive touch  (I2C, addr 0x63)
@@ -141,6 +141,17 @@ struct NvsProfile {
   bool valid;
 };
 
+#define MAX_AP_PROFILES 4
+
+struct ApProfile {
+  char    name[24];   // user label
+  char    ssid[33];   // AP broadcast SSID
+  char    pass[65];   // WPA2 password
+  uint8_t subnet;     // 0-3 (index into AP_SUBNET_DEFS)
+  bool    nat;        // enable NAPT internet sharing
+  bool    valid;
+};
+
 struct PiProfile {
   char ssid[33];
   char pass[65];
@@ -182,5 +193,6 @@ enum State {
   STATE_ESP_KB,       // character-picker — enter password
   STATE_ADVANCED,     // AP / info / Install on Pi
   STATE_ADV_INFO,     // system diagnostics
-  STATE_AP_ACTIVE     // AP mode running
+  STATE_AP_ACTIVE,    // AP mode running
+  STATE_AP_SELECT     // AP profile selection menu (pick 0-3 before starting)
 };

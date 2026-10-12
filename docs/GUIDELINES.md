@@ -27,7 +27,7 @@ _Agreements and preferences for this project._
 - Documentation is Markdown (`.md`) only — no PDF/Word copies.
 
 ### Generated files (never edit by hand)
-- `terminal_html.h` ← `HMS_RigConsole_v5/gen_terminal_html.py`
+- `terminal_html.h` ← `HMS_RigConsole_v6/gen_terminal_html.py`
 - `rigsetup_files.h` ← `pi/` via `tools/gen_rigsetup_h.py`
 - Commit the source and the generated file together; CI fails if they differ.
 

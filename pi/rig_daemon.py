@@ -19,12 +19,12 @@ ESP32 → Pi:
                                  then SCAN_DONE when finished
   CMD:START_AP                 — user started AP mode (informational)
   CMD:STOP_AP                  — user closed AP mode (informational)
-  CMD:TERM_OPEN                — open PTY bash terminal session
-  CMD:TERM_CLOSE               — close PTY bash terminal session
+  CMD:TERM_OPEN:<slot>         — open PTY bash session in slot 0-3 (one per tab)
+  CMD:TERM_CLOSE:<slot>        — close PTY bash session in slot 0-3
   CMD:MSC_EJECT                — ESP is about to remove its USB disk (SD Share /
                                  RIGSETUP): sync + unmount it, then reply
-  TERM:IN:<b64>                — base64-encoded keystrokes from browser terminal
-  CTL:RESIZE:<cols>:<rows>     — browser terminal resize notification
+  TERM:IN:<slot>:<b64>         — base64-encoded keystrokes for session <slot>
+  CTL:RESIZE:<slot>:<cols>:<rows> — terminal resize for session <slot>
 
 Pi → ESP32:
   ACK                          — response to HELLO
@@ -43,7 +43,7 @@ Pi → ESP32:
   ERR:ADDWIFI_FULL:<ssid>      — full profile failed
   SCAN_RESULT:<ssid>:<signal>:<freq>  — one network found during scan
   SCAN_DONE                    — scan finished (or failed silently)
-  TERM:OUT:<b64>               — base64-encoded PTY output to browser terminal
+  TERM:OUT:<slot>:<b64>        — base64-encoded PTY output from session <slot>
   OK:MSC_EJECT                 — ESP disk flushed and unmounted (safe to remove)
   ERR:MSC_EJECT:<reason>       — flushed, but unmount failed
 
@@ -52,6 +52,7 @@ Permissions:  user in group 'dialout', polkit rule for nmcli
 """
 
 import base64
+import dataclasses
 import glob
 import json
 import logging
@@ -211,13 +212,13 @@ def subnet_to_prefix(sn: str) -> str:
 
 
 def get_profiles_full() -> List[tuple]:
-    """Return list of (ssid, psk) for all NM WiFi connections (requires sudo for PSK)."""
+    """Return list of (ssid, psk) for all NM WiFi connections (polkit grants PSK read)."""
     names = get_wifi_profiles()
     result: List[tuple] = []
     for name in names:
         try:
             r = subprocess.run(
-                ["sudo", "nmcli", "-s", "-t", "-f",
+                ["nmcli", "-s", "-t", "-f",
                  "802-11-wireless.ssid,802-11-wireless-security.psk",
                  "connection", "show", name],
                 capture_output=True, text=True, timeout=10,
@@ -462,16 +463,27 @@ def send_profiles(ser: serial.Serial) -> None:
 
 
 # ---------------------------------------------------------------------------
-# PTY  — bash terminal bridged over USB serial
+# PTY  — up to 4 independent bash sessions bridged over USB serial
 # ---------------------------------------------------------------------------
-_term_master: Optional[int]      = None
-_term_pid:    Optional[int]      = None
-_term_stop                       = threading.Event()
+MAX_TERM_SESSIONS = 4
 
 
-def _term_reader(master_fd: int, ser: serial.Serial) -> None:
-    """Read PTY output, base64-encode it, and send to ESP32 over serial."""
-    while not _term_stop.is_set():
+@dataclasses.dataclass
+class _Session:
+    pid:    int
+    master: int
+    stop:   threading.Event
+    thread: threading.Thread
+
+
+_sessions: "dict[int, _Session]" = {}   # slot -> _Session (absent = free)
+_sess_lock = threading.Lock()
+
+
+def _term_reader(slot: int, master_fd: int, stop: threading.Event,
+                 ser: serial.Serial) -> None:
+    """Read PTY output, base64-encode, send TERM:OUT:<slot>:<b64> to ESP32."""
+    while not stop.is_set():
         try:
             r, _, _ = select.select([master_fd], [], [], 0.1)
             if not r:
@@ -481,74 +493,86 @@ def _term_reader(master_fd: int, ser: serial.Serial) -> None:
                 break
             b64 = base64.b64encode(data).decode("ascii")
             with _serial_lock:
-                ser.write(("TERM:OUT:" + b64 + "\n").encode("utf-8"))
+                ser.write(f"TERM:OUT:{slot}:{b64}\n".encode("utf-8"))
         except OSError:
             break
-    log.info("PTY reader thread exiting.")
+    log.info("PTY reader thread exiting (slot %d).", slot)
 
 
-def open_terminal(ser: serial.Serial) -> None:
-    """Fork a bash child attached to a PTY and start the reader thread."""
-    global _term_master, _term_pid
-    close_terminal()
+def open_terminal(slot: int, ser: serial.Serial) -> None:
+    """Fork a bash child for the given slot."""
+    close_terminal(slot)  # clean up any stale session in this slot
     try:
         pid, master_fd = pty.fork()
     except OSError as exc:
-        log.error("pty.fork() failed: %s", exc)
+        log.error("pty.fork() failed (slot %d): %s", slot, exc)
         return
     if pid == 0:
         os.environ["TERM"] = "xterm-256color"
         os.execvp("bash", ["bash", "-l"])
         os._exit(1)
-    _term_pid    = pid
-    _term_master = master_fd
-    _term_stop.clear()
-    t = threading.Thread(target=_term_reader, args=(master_fd, ser), daemon=True)
+    stop = threading.Event()
+    t = threading.Thread(
+        target=_term_reader, args=(slot, master_fd, stop, ser), daemon=True
+    )
     t.start()
-    log.info("Terminal opened (PID %d)", pid)
+    with _sess_lock:
+        _sessions[slot] = _Session(pid=pid, master=master_fd, stop=stop, thread=t)
+    log.info("Terminal opened (slot %d, PID %d).", slot, pid)
 
 
-def close_terminal() -> None:
-    """Kill bash and close the PTY."""
-    global _term_master, _term_pid
-    _term_stop.set()
-    if _term_pid is not None:
-        try:
-            os.kill(_term_pid, signal.SIGTERM)
-            os.waitpid(_term_pid, os.WNOHANG)
-        except OSError:
-            pass
-        _term_pid = None
-    if _term_master is not None:
-        try:
-            os.close(_term_master)
-        except OSError:
-            pass
-        _term_master = None
-    log.info("Terminal closed.")
+def close_terminal(slot: int) -> None:
+    """Kill bash and free the slot."""
+    with _sess_lock:
+        sess = _sessions.pop(slot, None)
+    if sess is None:
+        return
+    sess.stop.set()
+    try:
+        os.kill(sess.pid, signal.SIGTERM)
+        os.waitpid(sess.pid, os.WNOHANG)
+    except OSError:
+        pass
+    try:
+        os.close(sess.master)
+    except OSError:
+        pass
+    log.info("Terminal closed (slot %d).", slot)
 
 
-def term_input(b64_data: str) -> None:
-    """Decode base64 keystrokes from browser and write them to the PTY."""
-    if _term_master is None:
+def close_all_terminals() -> None:
+    """Close every open session (called on serial disconnect/reconnect)."""
+    with _sess_lock:
+        slots = list(_sessions.keys())
+    for slot in slots:
+        close_terminal(slot)
+
+
+def term_input(slot: int, b64_data: str) -> None:
+    """Write decoded keystrokes to the PTY for the given slot."""
+    with _sess_lock:
+        sess = _sessions.get(slot)
+    if sess is None:
         return
     try:
         data = base64.b64decode(b64_data)
-        os.write(_term_master, data)
+        os.write(sess.master, data)
     except Exception as exc:
-        log.error("PTY write error: %s", exc)
+        log.error("PTY write error (slot %d): %s", slot, exc)
 
 
-def term_resize(cols: int, rows: int) -> None:
-    """Tell the PTY (and bash/nano/etc.) about a new terminal size."""
-    if _term_master is None:
+def term_resize(slot: int, cols: int, rows: int) -> None:
+    """Resize the PTY for the given slot."""
+    with _sess_lock:
+        sess = _sessions.get(slot)
+    if sess is None:
         return
     try:
         import fcntl, struct, termios
         winsize = struct.pack("HHHH", rows, cols, 0, 0)
-        fcntl.ioctl(_term_master, termios.TIOCSWINSZ, winsize)
+        fcntl.ioctl(sess.master, termios.TIOCSWINSZ, winsize)
     except Exception as exc:
-        log.warning("PTY resize error: %s", exc)
+        log.warning("PTY resize error (slot %d): %s", slot, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -638,27 +662,43 @@ def dispatch(ser: serial.Serial, msg: str) -> None:
     elif msg == "CMD:STOP_AP":
         log.info("AP mode stopped")
 
-    elif msg == "CMD:TERM_OPEN":
-        log.info("Terminal session requested.")
-        open_terminal(ser)
+    elif msg.startswith("CMD:TERM_OPEN:"):
+        try:
+            slot = int(msg[14:])
+        except ValueError:
+            return
+        if 0 <= slot < MAX_TERM_SESSIONS:
+            log.info("Terminal session requested (slot %d).", slot)
+            open_terminal(slot, ser)
 
-    elif msg == "CMD:TERM_CLOSE":
-        log.info("Terminal session closed by browser.")
-        close_terminal()
+    elif msg.startswith("CMD:TERM_CLOSE:"):
+        try:
+            slot = int(msg[15:])
+        except ValueError:
+            return
+        log.info("Terminal session closed (slot %d).", slot)
+        close_terminal(slot)
 
     elif msg == "CMD:MSC_EJECT":
         err = eject_esp_msc()
         send(ser, "OK:MSC_EJECT" if err is None else f"ERR:MSC_EJECT:{err}")
 
     elif msg.startswith("TERM:IN:"):
-        term_input(msg[8:])
+        # TERM:IN:<slot>:<b64>
+        rest = msg[8:]
+        colon = rest.find(":")
+        if colon > 0:
+            try:
+                term_input(int(rest[:colon]), rest[colon + 1:])
+            except ValueError:
+                pass
 
     elif msg.startswith("CTL:RESIZE:"):
-        # CTL:RESIZE:<cols>:<rows>
+        # CTL:RESIZE:<slot>:<cols>:<rows>
         try:
-            _, cols_s, rows_s = msg[4:].split(":")
-            term_resize(int(cols_s), int(rows_s))
-        except ValueError:
+            parts = msg[11:].split(":")
+            term_resize(int(parts[0]), int(parts[1]), int(parts[2]))
+        except (ValueError, IndexError):
             pass
 
     else:
@@ -694,7 +734,7 @@ def handle_connection(ser: serial.Serial) -> None:
                     try:
                         dispatch(ser, line)
                     except serial.SerialException:
-                        close_terminal()
+                        close_all_terminals()
                         return
                     if line == "HELLO":
                         initialized = True
@@ -709,7 +749,7 @@ def handle_connection(ser: serial.Serial) -> None:
 
         time.sleep(0.02)
 
-    close_terminal()
+    close_all_terminals()
 
 
 # ---------------------------------------------------------------------------

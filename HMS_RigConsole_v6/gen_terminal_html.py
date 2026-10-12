@@ -212,6 +212,8 @@ html,body{width:100%;height:100%;background:#111;color:#ccc;font-family:sans-ser
 // ================================================================
 let term, ws;
 let wsReconnectTimer = null;
+let sessSlot = -1;          // session slot (0-3) assigned by ESP32 via SESS:<n>
+let sessFull = false;       // true after ERR:SESSION_FULL -> no auto-reconnect
 let macroPool  = { macros: [], nextId: 1 };
 let menuConf   = { menus: [], nextId: 1 };
 let qbSlots    = new Array(25).fill(-1);
@@ -341,10 +343,28 @@ function wsSendText(d) {
 
 function histPush(cmd) {
   if (!cmd || !cmd.trim()) return;
+  // Re-read the shared list so we never overwrite another tab's commands
+  try {
+    const fresh = JSON.parse(localStorage.getItem('cmdHist') || '[]');
+    if (Array.isArray(fresh)) cmdHist = fresh;
+  } catch (_) {}
   if (cmdHist[cmdHist.length - 1] !== cmd) cmdHist.push(cmd);
   if (cmdHist.length > HIST_MAX) cmdHist = cmdHist.slice(-HIST_MAX);
   try { localStorage.setItem('cmdHist', JSON.stringify(cmdHist)); } catch (_) {}
+  histIdx = cmdHist.length;  // always point past end after a push
 }
+
+// Sync command history when another tab appends a command
+window.addEventListener('storage', (e) => {
+  if (e.key !== 'cmdHist') return;
+  try {
+    const updated = JSON.parse(e.newValue || '[]');
+    if (Array.isArray(updated)) {
+      cmdHist = updated;
+      histIdx = cmdHist.length;  // reset navigation to end
+    }
+  } catch (_) {}
+});
 
 // Follow what the user types so Enter can record the command line.
 function histTrack(d) {
@@ -393,6 +413,17 @@ function wsConnect() {
   ws.onmessage = e => {
     const raw = e.data instanceof ArrayBuffer
       ? new TextDecoder().decode(e.data) : String(e.data);
+    if (raw.startsWith('SESS:')) {
+      sessSlot = parseInt(raw.slice(5), 10);
+      document.title = 'Terminal #' + (sessSlot + 1) + ' \u2014 HMS Rig Console';
+      return;
+    }
+    if (raw === 'ERR:SESSION_FULL') {
+      sessFull = true;
+      term.write('\r\n\x1b[31m[All 4 terminal sessions are in use. Close another tab and refresh.]\x1b[0m\r\n');
+      ws.close();
+      return;
+    }
     let bytes;
     try { bytes = Uint8Array.from(atob(raw), c => c.charCodeAt(0)); }
     catch (_) { bytes = new TextEncoder().encode(raw); }
@@ -400,6 +431,8 @@ function wsConnect() {
     sessionLog += new TextDecoder().decode(bytes);
   };
   ws.onclose = () => {
+    sessSlot = -1;
+    if (sessFull) { showToast('All terminal sessions in use', 4000); return; }
     showToast('Disconnected \u2014 reconnecting\u2026', 3000);
     clearTimeout(wsReconnectTimer);
     wsReconnectTimer = setTimeout(wsConnect, 2000);
@@ -740,7 +773,8 @@ function saveSession() {
   const blob = new Blob([sessionLog], {type:'text/plain'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'session_'+new Date().toISOString().replace(/[:.]/g,'').slice(0,15)+'.txt';
+  const slotSuffix = sessSlot >= 0 ? '_' + (sessSlot + 1) : '';
+  a.download = 'session'+slotSuffix+'_'+new Date().toISOString().replace(/[:.]/g,'').slice(0,15)+'.txt';
   a.click(); showToast('Session saved', 2000);
 }
 

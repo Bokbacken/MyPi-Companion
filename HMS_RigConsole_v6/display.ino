@@ -644,6 +644,21 @@ void drawAdvancedMenuContent() {
 
 
 // ============================================================
+//  AP PROFILE QUICK-PICK  (4 profiles + Back)
+// ============================================================
+void drawApSelectContent() {
+  MenuItem items[MAX_AP_PROFILES + 1];
+  static char labels[MAX_AP_PROFILES][28];
+  for (int i = 0; i < MAX_AP_PROFILES; i++) {
+    snprintf(labels[i], sizeof(labels[i]), "%d: %s", i + 1, apProfiles[i].name);
+    items[i] = { labels[i], COL_TEXT };
+  }
+  items[MAX_AP_PROFILES] = { "<- Back", COL_DIM };
+  drawMenuList(items, MAX_AP_PROFILES + 1, apSelectIndex, 0);
+}
+
+
+// ============================================================
 //  ADVANCED INFO  (system diagnostics)
 // ============================================================
 void drawAdvInfoContent() {
@@ -712,11 +727,13 @@ void drawApActiveContent() {
   gfx->drawFastHLine(4, y, SCREEN_W - 8, COL_BORDER);  y += 6;
 
   drawTxt("SSID:",    4, y, COL_DIM,  COL_BG);
-  drawTxt(AP_SSID_STR, 44, y, COL_TEXT, COL_BG);  y += R;
+  drawTxt(apProfiles[activeApProfile].ssid, 44, y, COL_TEXT, COL_BG);  y += R;
   drawTxt("Pass:",    4, y, COL_DIM,  COL_BG);
-  drawTxt(AP_PASS_STR, 44, y, COL_TEXT, COL_BG);  y += R;
+  drawTxt(apProfiles[activeApProfile].pass, 44, y, COL_TEXT, COL_BG);  y += R;
   drawTxt("Web:",     4, y, COL_DIM,  COL_BG);
-  drawTxt("192.168.4.1", 44, y, COL_ACCENT, COL_BG);   y += R;
+  drawTxt(dynApIp.toString().c_str(), 44, y, COL_ACCENT, COL_BG);
+  if (apNatActive()) drawTxt("NAT", SCREEN_W - 28, y, COL_ACTIVE, COL_BG);
+  y += R;
   drawTxt("OTA:",     4, y, COL_DIM,  COL_BG);
   drawTxt("/update",  44, y, COL_DIM,  COL_BG);         y += R;
 

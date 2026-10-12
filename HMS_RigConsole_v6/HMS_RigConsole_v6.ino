@@ -1,5 +1,5 @@
 // ============================================================
-//  HMS Rig Console — Firmware v5
+//  HMS Rig Console — Firmware v6
 //  Waveshare ESP32-S3-Touch-LCD-1.47
 //  Portrait 172×320 | JD9853 (via Arduino_GFX) | AXS5106L touch
 // ============================================================
@@ -17,11 +17,12 @@
 //    config.h              — pins, geometry, colours, structs, enum
 //    jd9853_init.h         — JD9853-specific register init
 //    touch_axs5106l.h      — AXS5106L I2C touch driver (header-only)
-//    HMS_RigConsole_v5.ino — includes, globals, setup, loop, splash
+//    HMS_RigConsole_v6.ino — includes, globals, setup, loop, splash
 //    display.ino           — all draw*() functions  (Arduino_GFX)
 //    touch.ino             — handleTouch, dispatchAction, pollWifiScan
 //    protocol.ino          — handleSerial, processMsg, wsEvent
 //    nvs_profiles.ino      — loadNvsProfiles, saveNvsSlot, deleteNvsSlot
+//    ap_profiles.ino       — loadApProfiles, saveApProfile, apComputeNetwork
 //    web_server.ino        — HTTP handlers, startWebServer, startAP/stopAP
 //    wifi_manager.ino      — wifiAutoConnect, wifiConnectSlot, espSSID/IP
 //
@@ -79,18 +80,32 @@ Arduino_Canvas_PSRAM *gfx    = nullptr;
 // -----------------------------------------------------------
 //  AP objects
 // -----------------------------------------------------------
-const char*     AP_SSID = AP_SSID_STR;
-const char*     AP_PASS = AP_PASS_STR;
-const IPAddress AP_IP(192, 168, 4, 1);
-const IPAddress AP_GW(192, 168, 4, 1);
-const IPAddress AP_SN(255, 255, 255, 0);
+// AP profiles (loaded from NVS on boot — ap_profiles.ino)
+ApProfile   apProfiles[MAX_AP_PROFILES];
+int         activeApProfile = 0;    // last started AP slot
+int         apSelectIndex   = 0;    // cursor in STATE_AP_SELECT menu
+// Runtime AP network settings (populated by startAP(slot))
+IPAddress   dynApIp, dynApGw, dynApSn;
+
+// Subnet definitions [subnet_idx] = {a, b, c}  -> IP a.b.c.1
+static const uint8_t AP_SUBNET_DEFS[MAX_AP_PROFILES][3] = {
+  {192, 168,  4},
+  {192, 168, 42},
+  { 10,  11,  0},
+  {172,  16,  4},
+};
+static const char* AP_SUBNET_LABELS[MAX_AP_PROFILES] = {
+  "192.168.4.x", "192.168.42.x", "10.11.0.x", "172.16.4.x"
+};
 
 // -----------------------------------------------------------
 //  Web server / WebSocket objects
 // -----------------------------------------------------------
 WebServer        server(80);
 WebSocketsServer wsServer(81);
-int              termWsClient = -1;
+#define MAX_TERM_SESSIONS 4
+int8_t termSlotClient[MAX_TERM_SESSIONS] = {-1, -1, -1, -1};
+// Maps session slot (0-3) -> WebSocket client num, -1 = free
 
 // -----------------------------------------------------------
 //  Dynamic profiles (from Pi via serial)
@@ -128,6 +143,17 @@ int   espActiveSlot = -1;   // NVS slot ESP is connected on (-1=none)
 // Pending Install-on-Pi request — set by web handler (HTTP task),
 // cleared + executed in loop() (Arduino task).
 volatile bool pendingPiInstall = false;
+volatile int  pendingApStart   = -1;   // AP profile slot to start from web (-1 = none)
+
+// Install target — see hid.ino.
+//   piInstallMode : 0 = Desktop (Ctrl+Alt+T + automount), 1 = CLI (console login)
+//   piUser        : Pi login name (persisted in NVS "rigcfg"/"instUser")
+//   piPass        : Pi password — RAM ONLY, wiped after every install attempt
+//   piLayoutForce : -1 = auto-detect keyboard layout, else HID_LAYOUTS index
+uint8_t piInstallMode = 0;
+char    piUser[33]    = "";
+char    piPass[65]    = "";
+int8_t  piLayoutForce = -1;
 
 // -----------------------------------------------------------
 //  KB ranges — 6 character groups (visible to all .ino files)
@@ -235,7 +261,7 @@ void drawProgmemImageTransp(int16_t x, int16_t y, int16_t w, int16_t h,
 //
 //  Layout (white background, portrait 172×320):
 //    Upper half (y 0..159)  — HMS logo + "HMS Networks"
-//    Lower half (y 160..319)— Anybus logo + "Rig Console v5"
+//    Lower half (y 160..319)— Anybus logo + "Rig Console v6"
 //
 //  Sequence:
 //    1. Start async Wi-Fi scan (non-blocking) immediately.
@@ -274,7 +300,7 @@ static void _splashBottom() {
   int y2 = 160 + (160 - ANYBUS_LOGO_SPLASH_H) / 2;
   drawProgmemImageTransp(x2, y2, ANYBUS_LOGO_SPLASH_W, ANYBUS_LOGO_SPLASH_H, anybus_logo_splash, 0x0000);
 
-  const char *lbl = "Rig Console  v5";
+  const char *lbl = "Rig Console  v6";
   gfx->setTextSize(1);
   gfx->setTextColor(COL_SPLASH_TXT, COL_SPLASH_BG);
   int16_t bx, by; uint16_t tw, th;
@@ -328,13 +354,19 @@ void setup() {
 
   // ---- NVS + LittleFS --------------------------------------
   loadNvsProfiles();
+  loadApProfiles();
   loadMacros();
   loadQuickBtns();
   littleFsBegin();
 
   // Load display-flip preference (same "rigcfg" namespace)
   { Preferences _p; _p.begin("rigcfg", true);
-    displayFlipped = _p.getBool("flip", false); _p.end(); }
+    displayFlipped = _p.getBool("flip", false);
+    // Install target (password is never stored)
+    piInstallMode = _p.getUChar("instMode", 0);
+    piLayoutForce = _p.getChar("instLayout", -1);
+    _p.getString("instUser", piUser, sizeof(piUser));
+    _p.end(); }
   if (displayFlipped) gfx->setRotation(2);
 
   // ---- Splash + async Wi-Fi scan ---------------------------
@@ -405,6 +437,15 @@ void loop() {
   if (pendingPiInstall) {
     pendingPiInstall = false;
     hidInstallOnPi();
+  }
+
+  // AP start requested from web UI (set by handleApiApStart)
+  if (pendingApStart >= 0) {
+    int slot = pendingApStart;
+    pendingApStart = -1;
+    startAP(slot);
+    currentState = STATE_AP_ACTIVE;
+    updateContentArea();
   }
 
   unsigned long now = millis();
