@@ -212,6 +212,8 @@ html,body{width:100%;height:100%;background:#111;color:#ccc;font-family:sans-ser
 // ================================================================
 let term, ws;
 let wsReconnectTimer = null;
+let sessSlot = -1;          // session slot (0-3) assigned by ESP32 via SESS:<n>
+let sessFull = false;       // true after ERR:SESSION_FULL -> no auto-reconnect
 let macroPool  = { macros: [], nextId: 1 };
 let menuConf   = { menus: [], nextId: 1 };
 let qbSlots    = new Array(25).fill(-1);
@@ -393,6 +395,17 @@ function wsConnect() {
   ws.onmessage = e => {
     const raw = e.data instanceof ArrayBuffer
       ? new TextDecoder().decode(e.data) : String(e.data);
+    if (raw.startsWith('SESS:')) {
+      sessSlot = parseInt(raw.slice(5), 10);
+      document.title = 'Terminal #' + (sessSlot + 1) + ' \u2014 HMS Rig Console';
+      return;
+    }
+    if (raw === 'ERR:SESSION_FULL') {
+      sessFull = true;
+      term.write('\r\n\x1b[31m[All 4 terminal sessions are in use. Close another tab and refresh.]\x1b[0m\r\n');
+      ws.close();
+      return;
+    }
     let bytes;
     try { bytes = Uint8Array.from(atob(raw), c => c.charCodeAt(0)); }
     catch (_) { bytes = new TextEncoder().encode(raw); }
@@ -400,6 +413,8 @@ function wsConnect() {
     sessionLog += new TextDecoder().decode(bytes);
   };
   ws.onclose = () => {
+    sessSlot = -1;
+    if (sessFull) { showToast('All terminal sessions in use', 4000); return; }
     showToast('Disconnected \u2014 reconnecting\u2026', 3000);
     clearTimeout(wsReconnectTimer);
     wsReconnectTimer = setTimeout(wsConnect, 2000);

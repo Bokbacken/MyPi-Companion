@@ -90,7 +90,9 @@ const IPAddress AP_SN(255, 255, 255, 0);
 // -----------------------------------------------------------
 WebServer        server(80);
 WebSocketsServer wsServer(81);
-int              termWsClient = -1;
+#define MAX_TERM_SESSIONS 4
+int8_t termSlotClient[MAX_TERM_SESSIONS] = {-1, -1, -1, -1};
+// Maps session slot (0-3) -> WebSocket client num, -1 = free
 
 // -----------------------------------------------------------
 //  Dynamic profiles (from Pi via serial)

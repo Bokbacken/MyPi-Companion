@@ -781,7 +781,7 @@ void startWebServer() {
 void webServerStop() {
   if (!_webServerRunning) return;
   wsServer.close();
-  termWsClient = -1;
+  memset(termSlotClient, -1, sizeof(termSlotClient));
   server.stop();
   _webServerRunning = false;
 }
@@ -809,7 +809,7 @@ void stopAP() {
   } else {
     if (_webServerRunning) {
       wsServer.close();
-      termWsClient = -1;
+      memset(termSlotClient, -1, sizeof(termSlotClient));
       server.stop();
       _webServerRunning = false;
     }
