@@ -22,7 +22,7 @@ static const char AP_PROFILES_HTML[] PROGMEM = R"html(
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{background:#0d1117;color:#e6e6e6;font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px}
-header{background:#1a3a6b;padding:12px 16px;display:flex;align-items:center;gap:12px;border-bottom:3px solid #F47B20}
+header{background:#1a3a6b;padding:12px 16px;display:flex;align-items:center;gap:12px}
 header a{color:#fff;text-decoration:none;font-size:18px}
 header h1{font-size:16px;font-weight:600}
 main{max-width:900px;margin:0 auto;padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}

@@ -45,8 +45,8 @@ void drawHeader(const char *title) {
   gfx->fillRect(0, 0, SCREEN_W, HDR_H, COL_HDR_BG);
   gfx->drawFastHLine(0, HDR_H - 1, SCREEN_W, COL_ACCENT);
   gfx->setTextSize(1);
-  drawTxt(title, 8, 6, COL_HDR_TXT, COL_HDR_BG);
-  int cx = SCREEN_W - LOGO_ICON_W - 8;   // 8 px margin for rounded corners
+  drawTxt(title, 10, 6, COL_HDR_TXT, COL_HDR_BG);
+  int cx = SCREEN_W - LOGO_ICON_W - 10;   // 10 px margin for rounded corners
   int cy = (HDR_H - LOGO_ICON_H) / 2;
   drawProgmemImage(cx, cy, LOGO_ICON_W, LOGO_ICON_H, logo_icon);
 }
@@ -57,7 +57,6 @@ void drawHeader(const char *title) {
 // ============================================================
 void drawStatusBar() {
   gfx->fillRect(0, STATUS_TOP, SCREEN_W, STATUS_H, COL_STATUS_BG);
-  gfx->drawFastHLine(0, STATUS_TOP, SCREEN_W, COL_ACCENT);
 
   // UART 8N1 frame for 0x43 ('C', Companion): start, 8 data bits LSB first, stop.
   // 10 bits x 17 px = 170 px, drawn as a green square wave above the text lines.

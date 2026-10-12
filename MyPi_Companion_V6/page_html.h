@@ -16,7 +16,7 @@ static const char PAGE_TMPL[] PROGMEM = R"html(<!DOCTYPE html>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,sans-serif;background:#0d1117;color:#e6e6e6;max-width:480px;margin:0 auto}
-.hdr{background:#1a3a6b;padding:12px 16px;border-bottom:3px solid #F47B20;display:flex;align-items:center;gap:12px}
+.hdr{background:#1a3a6b;padding:12px 16px;display:flex;align-items:center;gap:12px}
 .hdr img{height:40px;image-rendering:pixelated}
 .hdr h1{font-size:20px}.hdr small{color:#F47B20;font-size:11px;display:block}
 .card{background:#161b22;margin:12px;border-radius:8px;padding:14px;border:1px solid #30363d}
@@ -98,7 +98,7 @@ static const char NETWORKS_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,sans-serif;background:#0d1117;color:#e6e6e6;max-width:480px;margin:0 auto}
-.hdr{background:#1a3a6b;padding:10px 14px;border-bottom:3px solid #F47B20;display:flex;align-items:center;gap:10px}
+.hdr{background:#1a3a6b;padding:10px 14px;display:flex;align-items:center;gap:10px}
 .hdr img{height:34px;image-rendering:pixelated}
 .back{font-size:12px;color:#F47B20;text-decoration:none;display:block}
 .hdr h1{font-size:17px}
@@ -207,7 +207,7 @@ static const char INSTALLPI_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,sans-serif;background:#0d1117;color:#e6e6e6;max-width:480px;margin:0 auto}
-.hdr{background:#1a3a6b;padding:10px 14px;border-bottom:3px solid #F47B20;display:flex;align-items:center;gap:10px}
+.hdr{background:#1a3a6b;padding:10px 14px;display:flex;align-items:center;gap:10px}
 .hdr img{height:34px;image-rendering:pixelated}
 .back{font-size:12px;color:#F47B20;text-decoration:none;display:block}
 .hdr h1{font-size:17px}
@@ -312,7 +312,7 @@ static const char SYSINFO_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,sans-serif;background:#0d1117;color:#e6e6e6;max-width:480px;margin:0 auto}
-.hdr{background:#1a3a6b;padding:10px 14px;border-bottom:3px solid #F47B20;display:flex;align-items:center;gap:10px}
+.hdr{background:#1a3a6b;padding:10px 14px;display:flex;align-items:center;gap:10px}
 .hdr img{height:34px;image-rendering:pixelated}
 .back{font-size:12px;color:#F47B20;text-decoration:none;display:block}
 .hdr h1{font-size:17px}
@@ -400,7 +400,7 @@ static const char OTA_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,sans-serif;background:#0d1117;color:#e6e6e6;max-width:480px;margin:0 auto;padding:0}
-.hdr{background:#1a3a6b;padding:10px 14px;border-bottom:3px solid #F47B20;display:flex;align-items:center;gap:10px}
+.hdr{background:#1a3a6b;padding:10px 14px;display:flex;align-items:center;gap:10px}
 .hdr img{height:34px;image-rendering:pixelated}
 .back{font-size:12px;color:#F47B20;text-decoration:none;display:block}
 .hdr h1{font-size:17px}
