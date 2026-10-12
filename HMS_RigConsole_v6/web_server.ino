@@ -46,12 +46,22 @@
 //    POST /api/rigsetup/start — present RIGSETUP disk (built from /rigsetup/)
 //    POST /api/rigsetup/stop  — remove RIGSETUP disk
 //    GET  /api/rigsetup/status — {active,files:[{name,size}]}
+//    GET  /ap-profiles        — AP profile editor page
+//    GET  /api/approfiles     — JSON: all 4 AP profiles + subnet labels (no passwords)
+//    POST /api/approfile/save — save one AP profile (fields: slot, name, ssid, pass, subnet, nat)
+//    POST /api/apstart        — start AP with given slot (field: slot) [sets pendingApStart]
 // ============================================================
 
 #include "hms_logo_web.h"   // HMS_LOGO_WEB_PNG / HMS_LOGO_WEB_PNG_LEN
 #include "page_html.h"   // PAGE_TMPL, NETWORKS_HTML, INSTALLPI_HTML, SYSINFO_HTML, OTA_HTML
 #include "macros_html.h" // MACROS_HTML — GUI macro/menu editor at /macros
 #include "storage_html.h" // STORAGE_HTML — storage page at /storage
+#include "ap_profiles_html.h" // AP_PROFILES_HTML — AP profile editor at /ap-profiles
+#include "lwip/lwip_napt.h"   // ip_napt_enable() — NAPT internet sharing
+#include "lwip/tcpip.h"       // LOCK_TCPIP_CORE / UNLOCK_TCPIP_CORE
+
+static bool      _natActive = false;   // NAPT currently enabled on the AP
+static IPAddress _natGateway;          // AP interface address NAPT was enabled on
 
 
 // ============================================================
@@ -748,6 +758,12 @@ void startWebServer() {
   server.on("/api/rigsetup/status",     HTTP_GET,  handleRigsetupStatus);
   server.on("/api/rigsetup/force-copy", HTTP_POST, handleRigsetupForceCopy);
 
+  // AP profiles
+  server.on("/ap-profiles",        HTTP_GET,  handleApProfilesPage);
+  server.on("/api/approfiles",     HTTP_GET,  handleApiGetApProfiles);
+  server.on("/api/approfile/save", HTTP_POST, handleApiSaveApProfile);
+  server.on("/api/apstart",        HTTP_POST, handleApiApStart);
+
   // ── OTA ────────────────────────────────────────────────────
   server.on("/update", HTTP_GET,  handleOtaPage);
   server.on("/update", HTTP_POST,
@@ -790,19 +806,140 @@ void webServerStop() {
 // ============================================================
 //  ACCESS POINT  START / STOP
 // ============================================================
-void startAP() {
+// ── AP profile HTTP handlers ──────────────────────────────────
+
+// Escape a string for embedding inside a JSON string literal.
+static String _apJsonEsc(const char* in) {
+  String out;
+  for (const char* p = in; *p; p++) {
+    char c = *p;
+    if (c == '"' || c == '\\') { out += '\\'; out += c; }
+    else if ((uint8_t)c < 0x20) { char b[8]; snprintf(b, sizeof(b), "\\u%04x", c); out += b; }
+    else out += c;
+  }
+  return out;
+}
+
+// GET /ap-profiles — AP profile editor page
+void handleApProfilesPage() {
+  server.send_P(200, "text/html", AP_PROFILES_HTML);
+}
+
+// GET /api/approfiles — JSON array of all 4 AP profiles + subnet labels
+void handleApiGetApProfiles() {
+  String json = "[";
+  for (int i = 0; i < MAX_AP_PROFILES; i++) {
+    if (i) json += ",";
+    json += "{\"slot\":" + String(i);
+    json += ",\"name\":\"" + _apJsonEsc(apProfiles[i].name) + "\"";
+    json += ",\"ssid\":\"" + _apJsonEsc(apProfiles[i].ssid) + "\"";
+    json += ",\"pass\":\"********\"";   // never send the real password
+    json += ",\"subnet\":" + String(apProfiles[i].subnet);
+    json += ",\"subnetLabel\":\"" + String(AP_SUBNET_LABELS[apProfiles[i].subnet]) + "\"";
+    json += ",\"nat\":"    + String(apProfiles[i].nat ? "true" : "false");
+    json += ",\"valid\":"  + String(apProfiles[i].valid ? "true" : "false");
+    json += ",\"active\":" + String((currentState == STATE_AP_ACTIVE && activeApProfile == i) ? "true" : "false");
+    json += "}";
+  }
+  json += "]";
+  server.send(200, "application/json", json);
+}
+
+// POST /api/approfile/save — save one AP profile slot
+void handleApiSaveApProfile() {
+  if (!server.hasArg("slot")) { server.send(400, "text/plain", "ERR: missing slot"); return; }
+  int slot = server.arg("slot").toInt();
+  if (slot < 0 || slot >= MAX_AP_PROFILES) { server.send(400, "text/plain", "ERR: invalid slot"); return; }
+
+  if (server.hasArg("ssid")) {
+    String ssid = server.arg("ssid");
+    if (ssid.length() < 1 || ssid.length() > 32) { server.send(400, "text/plain", "ERR: SSID must be 1-32 chars"); return; }
+  }
+  bool newPass = server.hasArg("pass") && server.arg("pass").length() > 0 && server.arg("pass") != "********";
+  if (newPass) {
+    String pw = server.arg("pass");
+    if (pw.length() < 8 || pw.length() > 63) { server.send(400, "text/plain", "ERR: password must be 8-63 chars"); return; }
+  }
+
+  if (server.hasArg("name")) strlcpy(apProfiles[slot].name, server.arg("name").c_str(), sizeof(apProfiles[slot].name));
+  if (server.hasArg("ssid")) strlcpy(apProfiles[slot].ssid, server.arg("ssid").c_str(), sizeof(apProfiles[slot].ssid));
+  if (newPass)               strlcpy(apProfiles[slot].pass, server.arg("pass").c_str(), sizeof(apProfiles[slot].pass));
+  if (server.hasArg("subnet")) {
+    int sub = server.arg("subnet").toInt();
+    apProfiles[slot].subnet = (sub >= 0 && sub < MAX_AP_PROFILES) ? sub : 0;
+  }
+  if (server.hasArg("nat")) apProfiles[slot].nat = (server.arg("nat") == "1" || server.arg("nat") == "true");
+  saveApProfile(slot);
+  server.send(200, "text/plain", "Saved AP profile " + String(slot + 1));
+  if (currentState == STATE_AP_SELECT) updateContentArea();   // refresh names on display
+}
+
+// POST /api/apstart — request AP start (processed in loop() via pendingApStart)
+void handleApiApStart() {
+  if (!server.hasArg("slot")) { server.send(400, "text/plain", "ERR: missing slot"); return; }
+  int slot = server.arg("slot").toInt();
+  if (slot < 0 || slot >= MAX_AP_PROFILES) { server.send(400, "text/plain", "ERR: invalid slot"); return; }
+  pendingApStart = slot;
+  server.send(200, "text/plain", "Starting AP with profile " + String(slot + 1));
+}
+
+bool apNatActive() { return _natActive; }
+
+// Enable/disable lwIP NAPT on the given AP interface address.
+// CONFIG_LWIP_CHECK_THREAD_SAFETY is on in this core, so the
+// lwIP call must run with the TCPIP core lock held.
+static void _apSetNapt(IPAddress ifAddr, bool enable) {
+#if defined(CONFIG_LWIP_IPV4_NAPT) || defined(CONFIG_LWIP_IP_NAPT)
+  LOCK_TCPIP_CORE();
+  ip_napt_enable((uint32_t)ifAddr, enable ? 1 : 0);
+  UNLOCK_TCPIP_CORE();
+#else
+  (void)ifAddr; (void)enable;
+  log_w("NAPT not available in this build — internet sharing disabled");
+#endif
+}
+
+
+// ============================================================
+//  ACCESS POINT  START / STOP
+// ============================================================
+void startAP(int profileSlot) {
+  if (profileSlot < 0 || profileSlot >= MAX_AP_PROFILES) profileSlot = 0;
+  activeApProfile = profileSlot;
+  apComputeNetwork(profileSlot);    // sets dynApIp, dynApGw, dynApSn
+  const ApProfile& prof = apProfiles[profileSlot];
+
+  // Restarting with another profile: drop NAPT from the previous subnet first
+  if (_natActive) { _apSetNapt(_natGateway, false); _natActive = false; }
+
   if (espConnected) {
     WiFi.mode(WIFI_AP_STA);
   } else {
     WiFi.mode(WIFI_AP);
   }
-  WiFi.softAPConfig(AP_IP, AP_GW, AP_SN);
-  WiFi.softAP(AP_SSID, AP_PASS);
+  bool wantNat = prof.nat && espConnected;
+  // With NAT, hand out the upstream DNS server via DHCP so clients can resolve names
+  IPAddress dns = wantNat ? WiFi.dnsIP(0) : IPAddress((uint32_t)0);
+  WiFi.softAPConfig(dynApIp, dynApGw, dynApSn, IPAddress((uint32_t)0), dns);
+  WiFi.softAP(prof.ssid, prof.pass);
+
+  // Enable NAPT (internet sharing) if requested and STA is connected
+  if (wantNat) {
+    _apSetNapt(dynApGw, true);
+#if defined(CONFIG_LWIP_IPV4_NAPT) || defined(CONFIG_LWIP_IP_NAPT)
+    _natActive  = true;
+    _natGateway = dynApGw;
+#endif
+  }
   startWebServer();
   Serial.println("CMD:START_AP");
 }
 
 void stopAP() {
+  if (_natActive) {
+    _apSetNapt(_natGateway, false);
+    _natActive = false;
+  }
   WiFi.softAPdisconnect(true);
   if (espConnected) {
     WiFi.mode(WIFI_STA);

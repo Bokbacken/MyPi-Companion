@@ -54,6 +54,7 @@ footer{text-align:center;padding:12px;font-size:11px;color:#484f58}
 <a class="gbtn" href="/installonpi"><span class="ic">📦</span><span class="tx">Install on Pi</span></a>
 <a class="gbtn" href="/update"><span class="ic">📤</span><span class="tx">OTA Update</span></a>
 <a class="gbtn" href="/info"><span class="ic">ℹ️</span><span class="tx">System Info</span></a>
+<a class="gbtn" href="/ap-profiles"><span class="ic">🔌</span><span class="tx">AP Profiles</span></a>
 </div>
 <footer>HMS Rig Console &bull; rigconsole.local</footer>
 <script>

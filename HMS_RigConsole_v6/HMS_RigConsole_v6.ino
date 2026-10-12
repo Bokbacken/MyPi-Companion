@@ -22,6 +22,7 @@
 //    touch.ino             — handleTouch, dispatchAction, pollWifiScan
 //    protocol.ino          — handleSerial, processMsg, wsEvent
 //    nvs_profiles.ino      — loadNvsProfiles, saveNvsSlot, deleteNvsSlot
+//    ap_profiles.ino       — loadApProfiles, saveApProfile, apComputeNetwork
 //    web_server.ino        — HTTP handlers, startWebServer, startAP/stopAP
 //    wifi_manager.ino      — wifiAutoConnect, wifiConnectSlot, espSSID/IP
 //
@@ -79,11 +80,23 @@ Arduino_Canvas_PSRAM *gfx    = nullptr;
 // -----------------------------------------------------------
 //  AP objects
 // -----------------------------------------------------------
-const char*     AP_SSID = AP_SSID_STR;
-const char*     AP_PASS = AP_PASS_STR;
-const IPAddress AP_IP(192, 168, 4, 1);
-const IPAddress AP_GW(192, 168, 4, 1);
-const IPAddress AP_SN(255, 255, 255, 0);
+// AP profiles (loaded from NVS on boot — ap_profiles.ino)
+ApProfile   apProfiles[MAX_AP_PROFILES];
+int         activeApProfile = 0;    // last started AP slot
+int         apSelectIndex   = 0;    // cursor in STATE_AP_SELECT menu
+// Runtime AP network settings (populated by startAP(slot))
+IPAddress   dynApIp, dynApGw, dynApSn;
+
+// Subnet definitions [subnet_idx] = {a, b, c}  -> IP a.b.c.1
+static const uint8_t AP_SUBNET_DEFS[MAX_AP_PROFILES][3] = {
+  {192, 168,  4},
+  {192, 168, 42},
+  { 10,  11,  0},
+  {172,  16,  4},
+};
+static const char* AP_SUBNET_LABELS[MAX_AP_PROFILES] = {
+  "192.168.4.x", "192.168.42.x", "10.11.0.x", "172.16.4.x"
+};
 
 // -----------------------------------------------------------
 //  Web server / WebSocket objects
@@ -130,6 +143,7 @@ int   espActiveSlot = -1;   // NVS slot ESP is connected on (-1=none)
 // Pending Install-on-Pi request — set by web handler (HTTP task),
 // cleared + executed in loop() (Arduino task).
 volatile bool pendingPiInstall = false;
+volatile int  pendingApStart   = -1;   // AP profile slot to start from web (-1 = none)
 
 // Install target — see hid.ino.
 //   piInstallMode : 0 = Desktop (Ctrl+Alt+T + automount), 1 = CLI (console login)
@@ -340,6 +354,7 @@ void setup() {
 
   // ---- NVS + LittleFS --------------------------------------
   loadNvsProfiles();
+  loadApProfiles();
   loadMacros();
   loadQuickBtns();
   littleFsBegin();
@@ -422,6 +437,15 @@ void loop() {
   if (pendingPiInstall) {
     pendingPiInstall = false;
     hidInstallOnPi();
+  }
+
+  // AP start requested from web UI (set by handleApiApStart)
+  if (pendingApStart >= 0) {
+    int slot = pendingApStart;
+    pendingApStart = -1;
+    startAP(slot);
+    currentState = STATE_AP_ACTIVE;
+    updateContentArea();
   }
 
   unsigned long now = millis();

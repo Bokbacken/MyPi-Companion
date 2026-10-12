@@ -307,6 +307,11 @@ void goBack() {
       currentState = STATE_ADVANCED;
       break;
 
+    case STATE_AP_SELECT:
+      advMenuIndex = 0;
+      currentState = STATE_ADVANCED;
+      break;
+
     case STATE_MENU:
       currentState = STATE_STATUS;
       break;
@@ -370,6 +375,11 @@ void menuNext() {
       updateContentArea();
       break;
 
+    case STATE_AP_SELECT:
+      apSelectIndex = (apSelectIndex + 1) % (MAX_AP_PROFILES + 1);
+      updateContentArea();
+      break;
+
     default:
       break;
   }
@@ -424,6 +434,11 @@ void menuPrev() {
 
     case STATE_ADVANCED:
       advMenuIndex = (advMenuIndex + 4) % 5;
+      updateContentArea();
+      break;
+
+    case STATE_AP_SELECT:
+      apSelectIndex = (apSelectIndex + MAX_AP_PROFILES) % (MAX_AP_PROFILES + 1);
       updateContentArea();
       break;
 
@@ -568,8 +583,9 @@ void doSelect() {
     // ── Advanced sub-menu ─────────────────────────────────────
     case STATE_ADVANCED:
       if (advMenuIndex == 0) {
-        startAP();
-        currentState = STATE_AP_ACTIVE;
+        // Pick an AP profile first (STATE_AP_SELECT)
+        apSelectIndex = activeApProfile;
+        currentState  = STATE_AP_SELECT;
         updateContentArea();
       } else if (advMenuIndex == 1) {
         currentState = STATE_ADV_INFO;
@@ -594,6 +610,18 @@ void doSelect() {
       } else {
         goBack();
       }
+      break;
+
+    // ── AP profile quick-pick ─────────────────────────────────
+    case STATE_AP_SELECT:
+      if (apSelectIndex < MAX_AP_PROFILES) {
+        startAP(apSelectIndex);
+        currentState = STATE_AP_ACTIVE;
+      } else {
+        advMenuIndex = 0;
+        currentState = STATE_ADVANCED;   // "<- Back"
+      }
+      updateContentArea();
       break;
 
     // ── Terminal states — SELECT does nothing ─────────────────
@@ -760,6 +788,12 @@ void updateContentArea() {
       drawHeader("System Info");
       drawAdvInfoContent();
       drawTouchBar("BACK", "---");
+      break;
+
+    case STATE_AP_SELECT:
+      drawHeader("Start AP");
+      drawApSelectContent();
+      drawTouchBar("NEXT", "START");
       break;
 
     case STATE_AP_ACTIVE:
