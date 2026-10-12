@@ -45,10 +45,9 @@ void drawHeader(const char *title) {
   gfx->fillRect(0, 0, SCREEN_W, HDR_H, COL_HDR_BG);
   gfx->drawFastHLine(0, HDR_H - 1, SCREEN_W, COL_ACCENT);
   gfx->setTextSize(1);
-  drawTxt(title, 14, 6, COL_HDR_TXT, COL_HDR_BG);
-  int cx = SCREEN_W - HMS_LOGO_CORNER_W - 12;
-  int cy = (HDR_H - HMS_LOGO_CORNER_H) / 2;
-  drawProgmemImage(cx, cy, HMS_LOGO_CORNER_W, HMS_LOGO_CORNER_H, hms_logo_corner);
+  drawTxt(title, LOGO_ICON_W + 4, 6, COL_HDR_TXT, COL_HDR_BG);
+  int cy = (HDR_H - LOGO_ICON_H) / 2;
+  drawProgmemImage(1, cy, LOGO_ICON_W, LOGO_ICON_H, logo_icon);
 }
 
 

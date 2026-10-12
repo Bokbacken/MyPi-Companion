@@ -33,7 +33,6 @@ body{font-family:Arial,sans-serif;background:#0d1117;color:#e6e6e6;max-width:480
 footer{text-align:center;padding:12px;font-size:11px;color:#484f58}
 </style></head><body>
 <div class="hdr">
-<img src="/hms_logo.png" alt="HMS">
 <div><small>HMS Networks</small><h1>Rig Console</h1></div>
 </div>
 <div class="card">
@@ -108,7 +107,6 @@ input{width:100%;padding:9px;border-radius:6px;border:1px solid #30363d;backgrou
 footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 </style></head><body>
 <div class="hdr">
-<img src="/hms_logo.png" alt="HMS">
 <div><a class="back" href="/">← Dashboard</a><h1>Pi Networks</h1></div>
 </div>
 <div class="card">
@@ -214,7 +212,6 @@ ul{font-size:13px;color:#8b949e;padding-left:18px;margin-bottom:14px;line-height
 footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 </style></head><body>
 <div class="hdr">
-<img src="/hms_logo.png" alt="HMS">
 <div><a class="back" href="/">← Dashboard</a><h1>Install on Pi</h1></div>
 </div>
 <div class="card">
@@ -316,7 +313,6 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 .ts{font-size:10px;color:#484f58;text-align:right;margin:0 12px 4px}
 </style></head><body>
 <div class="hdr">
-<img src="/hms_logo.png" alt="HMS">
 <div><a class="back" href="/">← Dashboard</a><h1>System Info</h1></div>
 </div>
 <div class="ts" id="ts">Updating...</div>
@@ -404,7 +400,6 @@ progress{width:100%;height:20px;border-radius:4px}
 footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 </style></head><body>
 <div class="hdr">
-<img src="/hms_logo.png" alt="HMS">
 <div><a class="back" href="/">← Dashboard</a><h1>OTA Update</h1></div>
 </div>
 <div class="card">

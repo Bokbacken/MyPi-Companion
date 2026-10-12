@@ -7,7 +7,6 @@
 //
 //  Route list:
 //    GET  /                   — dashboard (status + 3×2 navigation grid)
-//    GET  /hms_logo.png       — HMS corner logo as PNG (served from PROGMEM)
 //    GET  /networks           — Pi networks page (list + add new)
 //    GET  /installonpi        — Install on Pi confirmation page
 //    GET  /info               — System information page
@@ -53,7 +52,6 @@
 //    GET  /api/apstatus       — JSON: AP/NAT/uplink diagnostics
 // ============================================================
 
-#include "hms_logo_web.h"   // HMS_LOGO_WEB_PNG / HMS_LOGO_WEB_PNG_LEN
 #include "page_html.h"   // PAGE_TMPL, NETWORKS_HTML, INSTALLPI_HTML, SYSINFO_HTML, OTA_HTML
 #include "macros_html.h" // MACROS_HTML — GUI macro/menu editor at /macros
 #include "storage_html.h" // STORAGE_HTML — storage page at /storage
@@ -84,12 +82,6 @@ void handleInstallPiPage() {
 
 void handleSysInfoPage() {
   server.send_P(200, "text/html", SYSINFO_HTML);
-}
-
-void handleHmsLogo() {
-  server.sendHeader("Cache-Control", "max-age=86400");
-  server.send_P(200, "image/png",
-                (const char *)HMS_LOGO_WEB_PNG, HMS_LOGO_WEB_PNG_LEN);
 }
 
 void handleConnect() {
@@ -696,7 +688,6 @@ void startWebServer() {
   server.on("/networks",    handleNetworks);
   server.on("/installonpi", handleInstallPiPage);
   server.on("/info",        handleSysInfoPage);
-  server.on("/hms_logo.png", handleHmsLogo);
 
   // ── API ────────────────────────────────────────────────────
   server.on("/connect",   handleConnect);
