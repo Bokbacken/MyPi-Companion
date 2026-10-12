@@ -27,7 +27,7 @@ macro pool on FFat · base64-correct macros · `termFit()` · FFat file manageme
 
 ## v6 (in progress, branch per feature)
 
-### v6.1 CLI / headless install — implemented, not yet hardware-tested
+### v6.1 CLI / headless install — implemented, hardware test pending
 - Install mode Desktop / CLI chosen on `/installonpi` (stored in NVS `rigcfg`, except the
   password, which is RAM-only and wiped after each run)
 - CLI: console login on tty1 via HID, `sudo` via `read -rs` + `sudo -S -v`, mount
@@ -36,6 +36,14 @@ macro pool on FFat · base64-correct macros · `termFit()` · FFat file manageme
 - `install.sh`: unzip the offline pyserial wheel when pip is missing (Lite), service gets
   `PYTHONPATH=/opt/rig-console/lib`; new code `RIG:INSTALL_ERR_DEPS`
 - USB networking (NCM) is deprioritized: with CLI install it is not needed
+
+### v6.1 multi-session terminal — hardware-tested
+- Up to 4 independent PTY sessions (one per browser tab), slot-tagged serial protocol
+- Shared command history across tabs (typed commands only), slot number in saved-session filename
+
+### v6.1 AP profiles + NAT — hardware-tested
+- 4 editable AP profiles (name, SSID, password, subnet preset, NAT) — touch picker + `/ap-profiles`
+- NAT internet sharing via ESP32 NAPT (~6 Mbit/s), forced client DNS 1.1.1.1, `/api/apstatus`
 
 ### Later v6 candidates
 RPC channel + daemon versioning · web login / PIN · robustness (connection limit, OTA

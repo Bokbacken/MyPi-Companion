@@ -351,6 +351,18 @@ commit both. The script asserts: no FitAddon, `termFit` present, vertical QB pre
 - [x] v6.1 CLI/headless install mode (console login, sudo, mount by label, logout)
 - [x] Install settings in NVS `rigcfg` (`instMode`, `instLayout`, `instUser`); password RAM-only
 - [x] `install.sh` wheel-unzip fallback for Raspberry Pi OS Lite (no pip)
-- [x] Compiles with arduino-cli
+- [x] Compiles with arduino-cli (~51 % of the 3 MB app partition)
+- [x] 4 independent terminal sessions (one PTY per browser tab) — **hardware-tested** (2 tabs)
+- [x] Shared command history across tabs (Ctrl+Up/Down) — **hardware-tested**.
+      Intended behavior: only commands typed by the user are stored; Quick Buttons,
+      macros and Up/Down shell-history recalls are not. Useful for re-sending a command
+      that was typed into the wrong session.
+- [x] 4 AP profiles (NVS `apcfg`): touch picker (Advanced → Start AP), `/ap-profiles`
+      editor, subnet presets 192.168.4 / 192.168.42 / 10.11.0 / 172.16.4 — **hardware-tested**
+- [x] NAT / internet sharing (`WiFi.AP.enableNAPT()`, resynced with STA uplink in loop,
+      `/api/apstatus` diagnostics) — **hardware-tested** at a hotel.
+      AP clients always get DNS `1.1.1.1` when NAT is on (upstream/hotel DNS is private and
+      unreachable through NAPT). Throughput ~6/3–4 Mbit/s (software NAPT on the ESP32;
+      fine for SSH/terminal/web) vs 112/120 Mbit/s directly on the hotel Wi-Fi.
 - [ ] Test CLI install on a fresh Raspberry Pi OS Lite (64-bit) on hardware
 - [ ] Re-test Desktop install (regression)
