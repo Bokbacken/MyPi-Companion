@@ -954,14 +954,13 @@ void startAP(int profileSlot) {
   bool uplink = espConnected && _staUplink();
   WiFi.mode(espConnected ? WIFI_AP_STA : WIFI_AP);
 
-  // DNS handed to AP clients via DHCP. The ESP has no DNS relay, so with NAT
-  // clients must get a real resolver: upstream DNS if known, else 8.8.8.8.
+  // DNS handed to AP clients via DHCP.
+  // When NAT is on, always use a public resolver (Cloudflare 1.1.1.1).
+  // The hotel/upstream DNS is a private address that is unreachable once
+  // traffic is NAPT-translated, which is why only IP pings worked but not
+  // hostname resolution. 1.1.1.1 and 8.8.8.8 are always routable via NAPT.
   _natWanted = prof.nat;
-  _natDns = IPAddress((uint32_t)0);
-  if (prof.nat) {
-    _natDns = uplink ? WiFi.dnsIP(0) : IPAddress((uint32_t)0);
-    if (_natDns == IPAddress((uint32_t)0)) _natDns = IPAddress(8, 8, 8, 8);
-  }
+  _natDns = prof.nat ? IPAddress(1, 1, 1, 1) : IPAddress((uint32_t)0);
   WiFi.softAPConfig(dynApIp, dynApGw, dynApSn, IPAddress((uint32_t)0), _natDns);
   WiFi.softAP(prof.ssid, prof.pass);
 
