@@ -448,6 +448,9 @@ void loop() {
     updateContentArea();
   }
 
+  // Keep NAT in sync with the STA uplink while the AP is running
+  apNatService();
+
   unsigned long now = millis();
 
   // Poll Pi every POLL_INTERVAL_MS (after first ACK)

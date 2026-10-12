@@ -6,6 +6,7 @@
 //    GET  /api/approfiles     — [{slot,name,ssid,pass:"********",subnet,subnetLabel,nat,valid,active}]
 //    POST /api/approfile/save — slot, name, ssid, [pass], subnet, nat
 //    POST /api/apstart        — slot
+//    GET  /api/apstatus[?test=1] — AP/NAT/uplink diagnostics
 //
 //  Edit this file directly (no generator script).
 // ============================================================
@@ -39,6 +40,13 @@ button{flex:1;padding:8px;border-radius:5px;border:1px solid #30363d;background:
 button:hover{border-color:#F47B20}
 button.primary{background:#F47B20;border-color:#F47B20;color:#000}
 .note{grid-column:1/-1;color:#8b949e;font-size:12px;line-height:1.5}
+.diag{grid-column:1/-1;background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px 14px;font-size:12px}
+.diag h2{font-size:13px;color:#F47B20;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.diag h2 button{flex:0;white-space:nowrap;padding:4px 10px;font-size:11px}
+.diag table{border-collapse:collapse;width:100%}
+.diag td{padding:2px 6px 2px 0;font-family:ui-monospace,Consolas,monospace}
+.diag td:first-child{color:#8b949e;width:130px}
+.ok{color:#3fb950}.bad{color:#f85149}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#21262d;border:1px solid #30363d;padding:10px 16px;border-radius:6px;opacity:0;transition:opacity .2s;pointer-events:none}
 #toast.show{opacity:1}
 #toast.err{border-color:#f85149;color:#f85149}
@@ -47,6 +55,7 @@ button.primary{background:#F47B20;border-color:#F47B20;color:#000}
 <body>
 <header><a href="/" title="Back">&#8592;</a><h1>HMS Rig Console — AP Profiles</h1></header>
 <main id="cards">
+<div class="diag" id="diag"><h2><span>NAT / uplink status</span><button onclick="loadStatus(true)">Test uplink</button></h2><table id="diagTbl"><tr><td>Loading…</td></tr></table></div>
 <p class="note">Starting an AP from here restarts the Wi-Fi access point. If you are connected through the AP, reconnect to the new SSID afterwards. NAT shares the ESP's Wi-Fi (STA) internet with AP clients and only works while the ESP is connected to a network.</p>
 </main>
 <div id="toast"></div>
@@ -119,7 +128,31 @@ async function startAp(slot) {
   catch (e) { toast(e.message || 'Start failed', true); }
 }
 
+function cls(ok) { return ok ? 'ok' : 'bad'; }
+async function loadStatus(test) {
+  try {
+    const r = await fetch('/api/apstatus' + (test ? '?test=1' : ''));
+    const d = await r.json();
+    const rows = [
+      ['AP', d.apActive ? `profile ${d.profile} — ${d.apIp} — ${d.clients} client(s)` : 'not running'],
+      ['NAT', `<span class="${cls(d.natActive || !d.natWanted)}">${esc(d.natStatus)}</span>`],
+      ['Client DNS', d.clientDns],
+      ['Uplink (STA)', d.staConnected ? `<span class="ok">${esc(d.staSsid)}</span> ${d.staIp} (${d.staRssi} dBm)` : '<span class="bad">not connected</span>'],
+      ['Uplink gateway', d.staGw],
+      ['Uplink DNS', d.staDns],
+    ];
+    if (d.dnsTest !== undefined)
+      rows.push(['ESP DNS test', `<span class="${cls(d.dnsTest !== 'FAIL')}">google.com → ${esc(d.dnsTest)}</span>`]);
+    else if (test)
+      rows.push(['ESP DNS test', '<span class="bad">skipped — no uplink</span>']);
+    document.getElementById('diagTbl').innerHTML =
+      rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+  } catch (e) { document.getElementById('diagTbl').innerHTML = '<tr><td class="bad">status unavailable</td></tr>'; }
+}
+
 load();
+loadStatus(false);
+setInterval(() => loadStatus(false), 5000);
 </script>
 </body>
 </html>

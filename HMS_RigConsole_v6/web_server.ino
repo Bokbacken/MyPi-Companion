@@ -50,6 +50,7 @@
 //    GET  /api/approfiles     — JSON: all 4 AP profiles + subnet labels (no passwords)
 //    POST /api/approfile/save — save one AP profile (fields: slot, name, ssid, pass, subnet, nat)
 //    POST /api/apstart        — start AP with given slot (field: slot) [sets pendingApStart]
+//    GET  /api/apstatus       — JSON: AP/NAT/uplink diagnostics
 // ============================================================
 
 #include "hms_logo_web.h"   // HMS_LOGO_WEB_PNG / HMS_LOGO_WEB_PNG_LEN
@@ -57,11 +58,12 @@
 #include "macros_html.h" // MACROS_HTML — GUI macro/menu editor at /macros
 #include "storage_html.h" // STORAGE_HTML — storage page at /storage
 #include "ap_profiles_html.h" // AP_PROFILES_HTML — AP profile editor at /ap-profiles
-#include "lwip/lwip_napt.h"   // ip_napt_enable() — NAPT internet sharing
-#include "lwip/tcpip.h"       // LOCK_TCPIP_CORE / UNLOCK_TCPIP_CORE
 
-static bool      _natActive = false;   // NAPT currently enabled on the AP
-static IPAddress _natGateway;          // AP interface address NAPT was enabled on
+// NAPT (internet sharing) state — see apNatService()
+static bool      _natActive  = false;  // NAPT currently enabled on the AP netif
+static bool      _natWanted  = false;  // active AP profile requests NAT
+static char      _natStatus[24] = "off"; // human-readable status for display/web
+static IPAddress _natDns;              // DNS server handed to AP clients
 
 
 // ============================================================
@@ -763,6 +765,7 @@ void startWebServer() {
   server.on("/api/approfiles",     HTTP_GET,  handleApiGetApProfiles);
   server.on("/api/approfile/save", HTTP_POST, handleApiSaveApProfile);
   server.on("/api/apstart",        HTTP_POST, handleApiApStart);
+  server.on("/api/apstatus",       HTTP_GET,  handleApiApStatus);
 
   // ── OTA ────────────────────────────────────────────────────
   server.on("/update", HTTP_GET,  handleOtaPage);
@@ -883,20 +886,56 @@ void handleApiApStart() {
   server.send(200, "text/plain", "Starting AP with profile " + String(slot + 1));
 }
 
-bool apNatActive() { return _natActive; }
+bool        apNatActive()  { return _natActive; }
+const char* apNatStatus()  { return _natStatus; }
 
-// Enable/disable lwIP NAPT on the given AP interface address.
-// CONFIG_LWIP_CHECK_THREAD_SAFETY is on in this core, so the
-// lwIP call must run with the TCPIP core lock held.
-static void _apSetNapt(IPAddress ifAddr, bool enable) {
-#if defined(CONFIG_LWIP_IPV4_NAPT) || defined(CONFIG_LWIP_IP_NAPT)
-  LOCK_TCPIP_CORE();
-  ip_napt_enable((uint32_t)ifAddr, enable ? 1 : 0);
-  UNLOCK_TCPIP_CORE();
-#else
-  (void)ifAddr; (void)enable;
-  log_w("NAPT not available in this build — internet sharing disabled");
-#endif
+// True when the STA side really has an uplink (associated + DHCP address).
+static bool _staUplink() {
+  return WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress((uint32_t)0);
+}
+
+// Enable/disable NAPT on the AP netif via the official esp_netif API
+// (WiFi.AP.enableNAPT -> esp_netif_napt_enable). Unlike the raw
+// ip_napt_enable(addr) call this binds to the netif itself, so it does not
+// depend on the AP address already being applied to lwIP.
+static bool _apSetNapt(bool enable) {
+  if (enable == _natActive) return true;
+  bool ok = WiFi.AP.enableNAPT(enable);
+  if (ok) _natActive = enable;
+  Serial.printf("[NAT] %s NAPT on AP %s: %s\n", enable ? "enable" : "disable",
+                WiFi.softAPIP().toString().c_str(), ok ? "OK" : "FAILED");
+  return ok;
+}
+
+// Called from loop(). Keeps NAPT in sync with the STA uplink so NAT also
+// works when the ESP (re)connects to Wi-Fi after the AP was started, and
+// reports a clear status when it can't work.
+static void _apNatUpdate();
+void apNatService() {
+  static unsigned long lastCheck = 0;
+  if (currentState != STATE_AP_ACTIVE && !_natActive) return;
+  if (millis() - lastCheck < 2000) return;
+  lastCheck = millis();
+  char prev[sizeof(_natStatus)];
+  strlcpy(prev, _natStatus, sizeof(prev));
+  _apNatUpdate();
+  if (strcmp(prev, _natStatus) != 0 && currentState == STATE_AP_ACTIVE) updateContentArea();
+}
+
+static void _apNatUpdate() {
+
+  if (!_natWanted) { strlcpy(_natStatus, "off", sizeof(_natStatus)); return; }
+  if (!_staUplink()) {
+    if (_natActive) _apSetNapt(false);
+    strlcpy(_natStatus, "no uplink", sizeof(_natStatus));
+    return;
+  }
+  if (!_natActive) {
+    if (_apSetNapt(true)) strlcpy(_natStatus, "on", sizeof(_natStatus));
+    else                  strlcpy(_natStatus, "NAPT failed", sizeof(_natStatus));
+  } else {
+    strlcpy(_natStatus, "on", sizeof(_natStatus));
+  }
 }
 
 
@@ -909,37 +948,41 @@ void startAP(int profileSlot) {
   apComputeNetwork(profileSlot);    // sets dynApIp, dynApGw, dynApSn
   const ApProfile& prof = apProfiles[profileSlot];
 
-  // Restarting with another profile: drop NAPT from the previous subnet first
-  if (_natActive) { _apSetNapt(_natGateway, false); _natActive = false; }
+  // Restarting with another profile: drop NAPT from the previous AP first
+  if (_natActive) _apSetNapt(false);
 
-  if (espConnected) {
-    WiFi.mode(WIFI_AP_STA);
-  } else {
-    WiFi.mode(WIFI_AP);
+  bool uplink = espConnected && _staUplink();
+  WiFi.mode(espConnected ? WIFI_AP_STA : WIFI_AP);
+
+  // DNS handed to AP clients via DHCP. The ESP has no DNS relay, so with NAT
+  // clients must get a real resolver: upstream DNS if known, else 8.8.8.8.
+  _natWanted = prof.nat;
+  _natDns = IPAddress((uint32_t)0);
+  if (prof.nat) {
+    _natDns = uplink ? WiFi.dnsIP(0) : IPAddress((uint32_t)0);
+    if (_natDns == IPAddress((uint32_t)0)) _natDns = IPAddress(8, 8, 8, 8);
   }
-  bool wantNat = prof.nat && espConnected;
-  // With NAT, hand out the upstream DNS server via DHCP so clients can resolve names
-  IPAddress dns = wantNat ? WiFi.dnsIP(0) : IPAddress((uint32_t)0);
-  WiFi.softAPConfig(dynApIp, dynApGw, dynApSn, IPAddress((uint32_t)0), dns);
+  WiFi.softAPConfig(dynApIp, dynApGw, dynApSn, IPAddress((uint32_t)0), _natDns);
   WiFi.softAP(prof.ssid, prof.pass);
 
-  // Enable NAPT (internet sharing) if requested and STA is connected
-  if (wantNat) {
-    _apSetNapt(dynApGw, true);
-#if defined(CONFIG_LWIP_IPV4_NAPT) || defined(CONFIG_LWIP_IP_NAPT)
-    _natActive  = true;
-    _natGateway = dynApGw;
-#endif
-  }
+  Serial.printf("[AP] profile %d '%s' ip=%s nat=%d sta=%s uplink=%d dns=%s\n",
+                profileSlot + 1, prof.ssid, WiFi.softAPIP().toString().c_str(),
+                prof.nat, WiFi.localIP().toString().c_str(), uplink,
+                _natDns.toString().c_str());
+
+  if (!prof.nat)      strlcpy(_natStatus, "off", sizeof(_natStatus));
+  else if (!uplink)   strlcpy(_natStatus, "no uplink", sizeof(_natStatus));
+  else if (_apSetNapt(true)) strlcpy(_natStatus, "on", sizeof(_natStatus));
+  else                strlcpy(_natStatus, "NAPT failed", sizeof(_natStatus));
+
   startWebServer();
   Serial.println("CMD:START_AP");
 }
 
 void stopAP() {
-  if (_natActive) {
-    _apSetNapt(_natGateway, false);
-    _natActive = false;
-  }
+  if (_natActive) _apSetNapt(false);
+  _natWanted = false;
+  strlcpy(_natStatus, "off", sizeof(_natStatus));
   WiFi.softAPdisconnect(true);
   if (espConnected) {
     WiFi.mode(WIFI_STA);
@@ -953,4 +996,32 @@ void stopAP() {
     WiFi.mode(WIFI_OFF);
   }
   Serial.println("CMD:STOP_AP");
+}
+
+// GET /api/apstatus — AP / NAT / uplink diagnostics (for troubleshooting NAT)
+void handleApiApStatus() {
+  // Optional upstream DNS test from the ESP itself: /api/apstatus?test=1
+  String dnsTest = "";
+  if (server.hasArg("test") && _staUplink()) {
+    IPAddress r;
+    dnsTest = WiFi.hostByName("google.com", r) == 1 ? r.toString() : String("FAIL");
+  }
+  String j = "{";
+  j += "\"apActive\":"   + String(currentState == STATE_AP_ACTIVE ? "true" : "false");
+  j += ",\"profile\":"   + String(activeApProfile + 1);
+  j += ",\"apIp\":\""    + WiFi.softAPIP().toString() + "\"";
+  j += ",\"clients\":"   + String((int)WiFi.softAPgetStationNum());
+  j += ",\"natWanted\":" + String(_natWanted ? "true" : "false");
+  j += ",\"natActive\":" + String(_natActive ? "true" : "false");
+  j += ",\"natStatus\":\"" + String(_natStatus) + "\"";
+  j += ",\"clientDns\":\"" + _natDns.toString() + "\"";
+  j += ",\"staConnected\":" + String(_staUplink() ? "true" : "false");
+  j += ",\"staSsid\":\""  + _apJsonEsc(WiFi.SSID().c_str()) + "\"";
+  j += ",\"staIp\":\""    + WiFi.localIP().toString() + "\"";
+  j += ",\"staGw\":\""    + WiFi.gatewayIP().toString() + "\"";
+  j += ",\"staDns\":\""   + WiFi.dnsIP(0).toString() + "\"";
+  j += ",\"staRssi\":"    + String(WiFi.RSSI());
+  if (dnsTest.length()) j += ",\"dnsTest\":\"" + dnsTest + "\"";
+  j += "}";
+  server.send(200, "application/json", j);
 }
