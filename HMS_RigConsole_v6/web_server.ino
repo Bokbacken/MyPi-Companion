@@ -7,7 +7,6 @@
 //
 //  Route list:
 //    GET  /                   — dashboard (status + 3×2 navigation grid)
-//    GET  /hms_logo.png       — HMS corner logo as PNG (served from PROGMEM)
 //    GET  /networks           — Pi networks page (list + add new)
 //    GET  /installonpi        — Install on Pi confirmation page
 //    GET  /info               — System information page
@@ -51,13 +50,14 @@
 //    POST /api/approfile/save — save one AP profile (fields: slot, name, ssid, pass, subnet, nat)
 //    POST /api/apstart        — start AP with given slot (field: slot) [sets pendingApStart]
 //    GET  /api/apstatus       — JSON: AP/NAT/uplink diagnostics
+//    GET  /logo.png           — MyPi Companion logo (PNG, PROGMEM)
 // ============================================================
 
-#include "hms_logo_web.h"   // HMS_LOGO_WEB_PNG / HMS_LOGO_WEB_PNG_LEN
 #include "page_html.h"   // PAGE_TMPL, NETWORKS_HTML, INSTALLPI_HTML, SYSINFO_HTML, OTA_HTML
 #include "macros_html.h" // MACROS_HTML — GUI macro/menu editor at /macros
 #include "storage_html.h" // STORAGE_HTML — storage page at /storage
 #include "ap_profiles_html.h" // AP_PROFILES_HTML — AP profile editor at /ap-profiles
+#include "logo_web.h"     // LOGO_WEB_PNG — MyPi Companion logo at /logo.png
 
 // NAPT (internet sharing) state — see apNatService()
 static bool      _natActive  = false;  // NAPT currently enabled on the AP netif
@@ -69,6 +69,13 @@ static IPAddress _natDns;              // DNS server handed to AP clients
 // ============================================================
 //  BASIC HTTP HANDLERS
 // ============================================================
+
+// GET /logo.png — MyPi Companion logo served straight from PROGMEM
+static void handleLogo() {
+  server.sendHeader("Cache-Control", "max-age=3600");
+  server.send_P(200, "image/png",
+                (const char *)LOGO_WEB_PNG, LOGO_WEB_PNG_LEN);
+}
 
 void handleRoot() {
   server.send_P(200, "text/html", PAGE_TMPL);
@@ -84,12 +91,6 @@ void handleInstallPiPage() {
 
 void handleSysInfoPage() {
   server.send_P(200, "text/html", SYSINFO_HTML);
-}
-
-void handleHmsLogo() {
-  server.sendHeader("Cache-Control", "max-age=86400");
-  server.send_P(200, "image/png",
-                (const char *)HMS_LOGO_WEB_PNG, HMS_LOGO_WEB_PNG_LEN);
 }
 
 void handleConnect() {
@@ -696,7 +697,7 @@ void startWebServer() {
   server.on("/networks",    handleNetworks);
   server.on("/installonpi", handleInstallPiPage);
   server.on("/info",        handleSysInfoPage);
-  server.on("/hms_logo.png", handleHmsLogo);
+  server.on("/logo.png",    handleLogo);
 
   // ── API ────────────────────────────────────────────────────
   server.on("/connect",   handleConnect);

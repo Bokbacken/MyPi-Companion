@@ -66,9 +66,7 @@ using namespace fs;
 #include "xterm_css.h"
 #include "terminal_html.h"
 #include "profiles_html.h"
-#include "hms_logo_splash.h"       // 110×64 px
-#include "anybus_logo_splash.h"    // 130×26 px
-#include "hms_logo_corner.h"       // 32×19 px
+#include "logo_bitmaps.h"          // MyPi Companion splash + header icon
 
 // -----------------------------------------------------------
 //  GFX objects  (heap-allocated; gfx is the canvas)
@@ -83,6 +81,7 @@ Arduino_Canvas_PSRAM *gfx    = nullptr;
 // AP profiles (loaded from NVS on boot — ap_profiles.ino)
 ApProfile   apProfiles[MAX_AP_PROFILES];
 int         activeApProfile = 0;    // last started AP slot
+bool        apOnBoot        = false; // NVS: start AP automatically on boot
 int         apSelectIndex   = 0;    // cursor in STATE_AP_SELECT menu
 // Runtime AP network settings (populated by startAP(slot))
 IPAddress   dynApIp, dynApGw, dynApSn;
@@ -259,54 +258,19 @@ void drawProgmemImageTransp(int16_t x, int16_t y, int16_t w, int16_t h,
 // ============================================================
 //  SPLASH SCREEN
 //
-//  Layout (white background, portrait 172×320):
-//    Upper half (y 0..159)  — HMS logo + "HMS Networks"
-//    Lower half (y 160..319)— Anybus logo + "Rig Console v6"
+//  Full-screen MyPi Companion logo (172×320, black background).
 //
 //  Sequence:
 //    1. Start async Wi-Fi scan (non-blocking) immediately.
-//    2. Show HMS logo on upper half → flush → delay 1 s.
-//    3. Add Anybus logo on lower half → flush.
-//    4. Poll until scan done (cap 3 s) → menu appears.
+//    2. Draw splash → flush → delay 1 s.
+//    3. Poll until scan done (cap 3 s) → menu appears.
 //
-//  This overlaps ~1.5 s of scan time with the splash display,
+//  This overlaps the scan time with the splash display,
 //  cutting perceived startup time significantly.
 // ============================================================
 
-// White splash background (RGB565 0xFFFF)
-#define COL_SPLASH_BG  ((uint16_t)0xFFFF)
-// Dark text colour for white splash
-#define COL_SPLASH_TXT ((uint16_t)0x0000)
-
-// Draw HMS logo on the upper half of a white screen.
-static void _splashTop() {
-  // Centre 110×64 logo in the upper 160 px
-  int x1 = (SCREEN_W - HMS_LOGO_SPLASH_W) / 2;
-  int y1 = (160 - HMS_LOGO_SPLASH_H) / 2;
-  drawProgmemImageTransp(x1, y1, HMS_LOGO_SPLASH_W, HMS_LOGO_SPLASH_H, hms_logo_splash, 0x0000);
-
-  gfx->setTextSize(1);
-  gfx->setTextColor(COL_SPLASH_TXT, COL_SPLASH_BG);
-  int16_t bx, by; uint16_t tw, th;
-  gfx->getTextBounds("HMS Networks", 0, 0, &bx, &by, &tw, &th);
-  gfx->setCursor((SCREEN_W - tw) / 2, y1 + HMS_LOGO_SPLASH_H + 6);
-  gfx->print("HMS Networks");
-}
-
-// Draw Anybus logo on the lower half of the same white screen.
-static void _splashBottom() {
-  // Centre 130×26 logo in the lower 160 px (starting at y=160)
-  int x2 = (SCREEN_W - ANYBUS_LOGO_SPLASH_W) / 2;
-  int y2 = 160 + (160 - ANYBUS_LOGO_SPLASH_H) / 2;
-  drawProgmemImageTransp(x2, y2, ANYBUS_LOGO_SPLASH_W, ANYBUS_LOGO_SPLASH_H, anybus_logo_splash, 0x0000);
-
-  const char *lbl = "Rig Console  v6";
-  gfx->setTextSize(1);
-  gfx->setTextColor(COL_SPLASH_TXT, COL_SPLASH_BG);
-  int16_t bx, by; uint16_t tw, th;
-  gfx->getTextBounds(lbl, 0, 0, &bx, &by, &tw, &th);
-  gfx->setCursor((SCREEN_W - tw) / 2, y2 + ANYBUS_LOGO_SPLASH_H + 8);
-  gfx->print(lbl);
+static void _drawSplash() {
+  drawProgmemImage(0, 0, LOGO_SPLASH_W, LOGO_SPLASH_H, logo_splash);
 }
 
 
@@ -362,6 +326,7 @@ void setup() {
   // Load display-flip preference (same "rigcfg" namespace)
   { Preferences _p; _p.begin("rigcfg", true);
     displayFlipped = _p.getBool("flip", false);
+    apOnBoot       = _p.getBool(NVS_KEY_AP_BOOT, false);
     // Install target (password is never stored)
     piInstallMode = _p.getUChar("instMode", 0);
     piLayoutForce = _p.getChar("instLayout", -1);
@@ -377,17 +342,12 @@ void setup() {
   WiFi.setSleep(false);
   WiFi.scanNetworks(true /*async*/, true /*show_hidden*/);
 
-  //  Step 2: White screen + HMS logo (upper half).
-  gfx->fillScreen(COL_SPLASH_BG);
-  _splashTop();
+  //  Step 2: Full-screen MyPi Companion splash.
+  _drawSplash();
   gfx->flush();
-  delay(1000);   // 1 s with HMS logo visible
+  delay(1000);   // 1 s with splash visible
 
-  //  Step 3: Add Anybus logo (lower half) — still white bg.
-  _splashBottom();
-  gfx->flush();
-
-  //  Step 4: Wait for scan to finish (cap 3 s; usually done already).
+  //  Step 3: Wait for scan to finish (cap 3 s; usually done already).
   {
     unsigned long scanDeadline = millis() + 3000UL;
     while (WiFi.scanComplete() == WIFI_SCAN_RUNNING &&
@@ -396,10 +356,10 @@ void setup() {
     }
   }
 
-  //  Step 5: Auto-connect using the completed scan results.
+  //  Step 4: Auto-connect using the completed scan results.
   wifiAutoConnect();   // reuses WiFi.scanComplete() — does NOT re-scan
 
-  //  Step 6: Clear splash (logos have solid black bg — looks bad on menu).
+  //  Step 5: Clear splash (logos have solid black bg — looks bad on menu).
   gfx->fillScreen(COL_BG);
 
   // ---- Home screen -----------------------------------------
@@ -408,6 +368,15 @@ void setup() {
   drawTouchBar("MENU", "SELECT");
   drawHomeContent();
   gfx->flush();
+
+  // ---- AP on boot -----------------------------------------
+  //  Nothing else starts the AP during setup(). Switch to the AP
+  //  screen so loop() services the web server even without STA.
+  if (apOnBoot && currentState != STATE_AP_ACTIVE) {
+    startAP(activeApProfile);
+    currentState = STATE_AP_ACTIVE;
+    updateContentArea();
+  }
 
   // ---- Serial handshake ------------------------------------
   delay(200);

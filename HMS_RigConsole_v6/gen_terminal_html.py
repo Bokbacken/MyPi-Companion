@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 gen_terminal_html.py
-Generate terminal_html.h for HMS Rig Console v4.
+Generate terminal_html.h for MyPi Companion.
 NOTE: No FitAddon — sizing handled via termFit() DOM measurement.
 """
 import os
@@ -18,7 +18,7 @@ HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HMS Rig Console</title>
+<title>MyPi Companion</title>
 <link rel="stylesheet" href="/xterm.css">
 <script src="/xterm.js"></script>
 <style>
@@ -139,6 +139,7 @@ html,body{width:100%;height:100%;background:#111;color:#ccc;font-family:sans-ser
   </div>
   <div id="dyn-menus" style="display:contents"></div>
 </div>
+<div class="wavesep" style="line-height:0;display:block;margin:0;padding:0"><svg viewBox="0 0 900 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" style="display:block;width:100%;height:20px;margin:0"><path d="M0,15L10,15L10,3L20,3L30,3L30,15L40,15L50,15L60,15L70,15L70,3L80,3L80,15L90,15L90,3L100,3L100,15L110,15L110,3L120,3L130,3L140,3L150,3L150,15L160,15L160,3L170,3L180,3L180,15L190,15L190,3L200,3L200,15L210,15L210,3L220,3L220,15L230,15L230,3L240,3L250,3L250,15L260,15L260,3L270,3L280,3L280,15L290,15L290,3L300,3L300,15L310,15L320,15L330,15L340,15L350,15L350,3L360,3L370,3L380,3L380,15L390,15L390,3L400,3L400,15L410,15L410,3L420,3L420,15L430,15L440,15L450,15L460,15L460,3L470,3L480,3L480,15L490,15L490,3L500,3L500,15L510,15L520,15L520,3L530,3L540,3L550,3L550,15L560,15L560,3L570,3L580,3L580,15L590,15L590,3L600,3L600,15L610,15L610,3L620,3L620,15L630,15L640,15L640,3L650,3L650,15L660,15L660,3L670,3L680,3L680,15L690,15L690,3L700,3L700,15L710,15L710,3L720,3L730,3L740,3L750,3L750,15L760,15L760,3L770,3L780,3L780,15L790,15L790,3L800,3L800,15L810,15L820,15L820,3L830,3L840,3L850,3L850,15L860,15L860,3L870,3L880,3L880,15L890,15L890,3L900,3" stroke="#4CC870" stroke-width="1.5" fill="none"/></svg></div>
 <div id="main">
   <div id="qbpanel">
     <div id="qb-label">Quick</div>
@@ -415,7 +416,7 @@ function wsConnect() {
       ? new TextDecoder().decode(e.data) : String(e.data);
     if (raw.startsWith('SESS:')) {
       sessSlot = parseInt(raw.slice(5), 10);
-      document.title = 'Terminal #' + (sessSlot + 1) + ' \u2014 HMS Rig Console';
+      document.title = 'Terminal #' + (sessSlot + 1) + ' \u2014 MyPi Companion';
       return;
     }
     if (raw === 'ERR:SESSION_FULL') {
