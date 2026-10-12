@@ -732,8 +732,12 @@ void drawApActiveContent() {
   drawTxt(apProfiles[activeApProfile].pass, 44, y, COL_TEXT, COL_BG);  y += R;
   drawTxt("Web:",     4, y, COL_DIM,  COL_BG);
   drawTxt(dynApIp.toString().c_str(), 44, y, COL_ACCENT, COL_BG);
-  if (apNatActive()) drawTxt("NAT", SCREEN_W - 28, y, COL_ACTIVE, COL_BG);
   y += R;
+  if (apProfiles[activeApProfile].nat) {
+    drawTxt("NAT:", 4, y, COL_DIM, COL_BG);
+    drawTxt(apNatStatus(), 44, y, apNatActive() ? COL_ACTIVE : COL_ACCENT, COL_BG);
+    y += R;
+  }
   drawTxt("OTA:",     4, y, COL_DIM,  COL_BG);
   drawTxt("/update",  44, y, COL_DIM,  COL_BG);         y += R;
 
