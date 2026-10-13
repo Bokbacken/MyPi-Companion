@@ -59,6 +59,10 @@
 #include "ap_profiles_html.h" // AP_PROFILES_HTML — AP profile editor at /ap-profiles
 #include "logo_web.h"     // LOGO_WEB_PNG — MyPi Companion logo at /logo.png
 #include <esp_wifi.h>     // channel / power-save / bandwidth diagnostics
+#include <esp_wifi_ap_get_sta_list.h>   // esp_wifi_ap_get_sta_list_with_ip() for /api/apstatus
+
+// Forward declaration (defined in display.ino)
+const char* _ouiLookup(const uint8_t *mac);
 
 // NAPT (internet sharing) state — see apNatService()
 static bool      _natActive  = false;  // NAPT currently enabled on the AP netif
@@ -130,7 +134,7 @@ void handleStatus() {
   json += "\",\"espip\":\"";
   json += espIP;
   json += "\",\"ap\":";
-  json += (currentState == STATE_AP_ACTIVE) ? "true" : "false";
+  json += apRunning ? "true" : "false";
   json += "}";
   server.send(200, "application/json", json);
 }
@@ -150,6 +154,16 @@ void handleApiInfo() {
   json += ",\"esp_connected\":"; json += espConnected ? "true" : "false";
   json += ",\"esp_ssid\":\"";  json += espSSID;    json += "\"";
   json += ",\"esp_ip\":\"";    json += espIP;      json += "\"";
+  // Firmware version + build date (__DATE__ "Oct 13 2026" -> "13 Oct 2026")
+  char dateBuf[16];
+  char mon_[4]; int day_; char year_[5];
+  if (sscanf(__DATE__, "%3s %d %4s", mon_, &day_, year_) == 3) {
+    snprintf(dateBuf, sizeof(dateBuf), "%d %s %s", day_, mon_, year_);
+  } else {
+    strlcpy(dateBuf, __DATE__, sizeof(dateBuf));
+  }
+  json += ",\"fw_version\":\"" FW_VERSION "\"";
+  json += ",\"fw_date\":\""; json += dateBuf; json += "\"";
   json += "}";
   server.send(200, "application/json", json);
 }
@@ -895,7 +909,9 @@ void handleApiGetApProfiles() {
     json += ",\"subnetLabel\":\"" + String(AP_SUBNET_LABELS[apProfiles[i].subnet]) + "\"";
     json += ",\"nat\":"    + String(apProfiles[i].nat ? "true" : "false");
     json += ",\"valid\":"  + String(apProfiles[i].valid ? "true" : "false");
-    json += ",\"active\":" + String((currentState == STATE_AP_ACTIVE && activeApProfile == i) ? "true" : "false");
+    json += ",\"active\":" + String((apRunning && activeApProfile == i) ? "true" : "false");
+    json += ",\"onBoot\":"     + String(apProfiles[i].onBoot ? "true" : "false");
+    json += ",\"hideOnBoot\":" + String(apProfiles[i].hideOnBoot ? "true" : "false");
     json += "}";
   }
   json += "]";
@@ -926,6 +942,18 @@ void handleApiSaveApProfile() {
     apProfiles[slot].subnet = (sub >= 0 && sub < MAX_AP_PROFILES) ? sub : 0;
   }
   if (server.hasArg("nat")) apProfiles[slot].nat = (server.arg("nat") == "1" || server.arg("nat") == "true");
+  if (server.hasArg("hideOnBoot"))
+    apProfiles[slot].hideOnBoot = (server.arg("hideOnBoot") == "1" || server.arg("hideOnBoot") == "true");
+  if (server.hasArg("onBoot")) {
+    bool ob = (server.arg("onBoot") == "1" || server.arg("onBoot") == "true");
+    apProfiles[slot].onBoot = ob;
+    if (ob) {
+      // Only one profile may start on boot: clear the flag elsewhere
+      for (int i = 0; i < MAX_AP_PROFILES; i++) {
+        if (i != slot && apProfiles[i].onBoot) { apProfiles[i].onBoot = false; saveApProfile(i); }
+      }
+    }
+  }
   saveApProfile(slot);
   server.send(200, "text/plain", "Saved AP profile " + String(slot + 1));
   if (currentState == STATE_AP_SELECT) updateContentArea();   // refresh names on display
@@ -967,7 +995,7 @@ static bool _apSetNapt(bool enable) {
 static void _apNatUpdate();
 void apNatService() {
   static unsigned long lastCheck = 0;
-  if (currentState != STATE_AP_ACTIVE && !_natActive) return;
+  if (!apRunning && !_natActive) return;
   if (millis() - lastCheck < 2000) return;
   lastCheck = millis();
   char prev[sizeof(_natStatus)];
@@ -1041,6 +1069,7 @@ void startAP(int profileSlot) {
 
   startWebServer();
   Serial.println("CMD:START_AP");
+  apRunning = true;
 }
 
 void stopAP() {
@@ -1060,6 +1089,7 @@ void stopAP() {
     WiFi.mode(WIFI_OFF);
   }
   Serial.println("CMD:STOP_AP");
+  apRunning = false;
 }
 
 // GET /api/apstatus — AP / NAT / uplink diagnostics (for troubleshooting NAT)
@@ -1071,10 +1101,40 @@ void handleApiApStatus() {
     dnsTest = WiFi.hostByName("google.com", r) == 1 ? r.toString() : String("FAIL");
   }
   String j = "{";
-  j += "\"apActive\":"   + String(currentState == STATE_AP_ACTIVE ? "true" : "false");
+  j += "\"apActive\":"   + String(apRunning ? "true" : "false");
   j += ",\"profile\":"   + String(activeApProfile + 1);
   j += ",\"apIp\":\""    + WiFi.softAPIP().toString() + "\"";
   j += ",\"clients\":"   + String((int)WiFi.softAPgetStationNum());
+  // Per-client list: MAC from the Wi-Fi driver, IP from the DHCP server
+  j += ",\"clientList\":[";
+  if (apRunning) {
+    static wifi_sta_list_t        wsl;   // static: keep ~0.5 KB off the stack
+    static wifi_sta_mac_ip_list_t ipl;
+    memset(&wsl, 0, sizeof(wsl));
+    memset(&ipl, 0, sizeof(ipl));
+    bool haveIp = false;
+    if (esp_wifi_ap_get_sta_list(&wsl) == ESP_OK)
+      haveIp = (esp_wifi_ap_get_sta_list_with_ip(&wsl, &ipl) == ESP_OK);
+    for (int ci = 0; ci < wsl.num; ci++) {
+      const uint8_t *mac = wsl.sta[ci].mac;
+      char ipStr[16] = "";
+      int  lastOctet = -1;
+      if (haveIp && ipl.sta[ci].ip.addr != 0) {
+        snprintf(ipStr, sizeof(ipStr), IPSTR, IP2STR(&ipl.sta[ci].ip));
+        lastOctet = (int)esp_ip4_addr4(&ipl.sta[ci].ip);
+      }
+      const char *oui = _ouiLookup(mac);
+      char macSuffix[10];
+      snprintf(macSuffix, sizeof(macSuffix), "%02x:%02x:%02x", mac[3], mac[4], mac[5]);
+      char entry[128];
+      snprintf(entry, sizeof(entry),
+               "%s{\"ip\":\"%s\",\"dot\":%d,\"label\":\"%s\",\"mac\":\"%02x:%02x:%02x:%02x:%02x:%02x\"}",
+               ci ? "," : "", ipStr, lastOctet, oui ? oui : macSuffix,
+               mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+      j += entry;
+    }
+  }
+  j += "]";
   j += ",\"natWanted\":" + String(_natWanted ? "true" : "false");
   j += ",\"natActive\":" + String(_natActive ? "true" : "false");
   j += ",\"natStatus\":\"" + String(_natStatus) + "\"";

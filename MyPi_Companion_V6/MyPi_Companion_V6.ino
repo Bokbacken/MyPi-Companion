@@ -81,8 +81,9 @@ Arduino_Canvas_PSRAM *gfx    = nullptr;
 // AP profiles (loaded from NVS on boot — ap_profiles.ino)
 ApProfile   apProfiles[MAX_AP_PROFILES];
 int         activeApProfile = 0;    // last started AP slot
-bool        apOnBoot        = false; // NVS: start AP automatically on boot
+bool        apRunning       = false; // true while softAP is up, regardless of display state
 int         apSelectIndex   = 0;    // cursor in STATE_AP_SELECT menu
+int         apBootSelectIdx = 0;    // cursor in boot-select list (0=None, 1-4=slot 0-3)
 // Runtime AP network settings (populated by startAP(slot))
 IPAddress   dynApIp, dynApGw, dynApSn;
 
@@ -166,9 +167,9 @@ int8_t  piLayoutForce = -1;
 const char * const KB_RANGES[KB_RANGE_COUNT] = {
   "abcdefghijklmnopqrstuvwxyz",
   "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-  "0123456789",
-  "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~",
-  "()[]{}<>|~ ",
+  " 0123456789",                 // 09: space first, then digits
+  "!#@$%&*-_+=.,?:;/",           // S1: common password symbols
+  "\"'()[]\\{}^~|<>`",             // S2: structural / rare symbols (no overlap with S1)
   "\xe5\xe4\xf6\xc5\xc4\xd6\xe9\xe8\xea\xeb\xe0\xe2\xe7\xfc\xfb\xf9\xfa\xee\xef\xf4"
 };
 
@@ -177,6 +178,13 @@ int  kbCharIdx  = 0;
 char kbPass[65] = "";
 int  kbPassLen  = 0;
 char kbPendingSSID[33] = "";
+
+// KB mode — controls what kbOk() does after text entry
+enum KbMode { KB_MODE_WIFI, KB_MODE_INSTALL_USER, KB_MODE_INSTALL_PASS };
+KbMode kbMode = KB_MODE_WIFI;
+
+// Advanced menu: GUI install confirmation pending
+bool advGuiConfirmPending = false;
 
 // -----------------------------------------------------------
 //  ESP Wi-Fi scan state  (filled by pollWifiScan in touch.ino)
@@ -332,7 +340,6 @@ void setup() {
   // Load display-flip preference (same "rigcfg" namespace)
   { Preferences _p; _p.begin("rigcfg", true);
     displayFlipped = _p.getBool("flip", false);
-    apOnBoot       = _p.getBool(NVS_KEY_AP_BOOT, false);
     // Install target (password is never stored)
     piInstallMode = _p.getUChar("instMode", 0);
     piLayoutForce = _p.getChar("instLayout", -1);
@@ -379,9 +386,14 @@ void setup() {
   // ---- AP on boot -----------------------------------------
   //  Nothing else starts the AP during setup(). Switch to the AP
   //  screen so loop() services the web server even without STA.
-  if (apOnBoot && currentState != STATE_AP_ACTIVE) {
-    startAP(activeApProfile);
+  //  The boot slot and hide flag are stored per AP profile.
+  int bootSlot = apBootSlot();
+  if (bootSlot >= 0) {
+    startAP(bootSlot);          // sets apRunning + activeApProfile
     currentState = STATE_AP_ACTIVE;
+    if (apProfiles[bootSlot].hideOnBoot) {
+      currentState = STATE_STATUS;   // header shows AP icon (apRunning)
+    }
     updateContentArea();
   }
 
@@ -421,7 +433,7 @@ static void _loopBody() {
   mscLoop();   // host-initiated MSC eject (SCSI START STOP UNIT)
 
   // Web server: active in AP mode AND/OR when ESP is in STA mode
-  if (currentState == STATE_AP_ACTIVE || espConnected) {
+  if (apRunning || espConnected) {
     server.handleClient();
     wsServer.loop();
   }
@@ -429,6 +441,7 @@ static void _loopBody() {
   // Async Wi-Fi scan polling
   if (currentState == STATE_ESP_SCAN) pollWifiScan();
   if (currentState == STATE_PI_SCAN)  pollPiScan();
+  pollApClients();
 
   // Install-on-Pi requested from web UI (set by handleApiInstallOnPi)
   if (pendingPiInstall) {
@@ -440,7 +453,7 @@ static void _loopBody() {
   if (pendingApStart >= 0) {
     int slot = pendingApStart;
     pendingApStart = -1;
-    startAP(slot);
+    startAP(slot);              // sets apRunning
     currentState = STATE_AP_ACTIVE;
     updateContentArea();
   }

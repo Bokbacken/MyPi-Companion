@@ -1,6 +1,6 @@
 # MyPi Companion — User Guide
 
-_Firmware v6.1 · October 2026_
+_Firmware v6.2 · October 2026_
 
 MyPi Companion is a small touch-screen device that plugs into a Raspberry Pi over USB.
 You can use it to see and change the Pi's network setup, open a terminal on the Pi from a
@@ -91,7 +91,7 @@ The screen is split into four fixed horizontal zones:
 
 ```
  y=0   ┌──────────────────────┐
-       │ Header         [logo]│  20 px   screen title + MyPi icon
+       │ Header     (AP)[logo]│  20 px   screen title, AP icon (when on), MyPi icon
  y=20  ├──────────────────────┤
        │                      │
        │   Content area       │  216 px  menus / info / keyboard
@@ -106,7 +106,7 @@ The screen is split into four fixed horizontal zones:
 
 | Zone | Rows (y) | Height | Content |
 |---|---|---|---|
-| Header | 0–19 | 20 px | Name of the current screen, MyPi logo icon at top right |
+| Header | 0–19 | 20 px | Name of the current screen, MyPi logo icon at top right. While the AP runs, a Wi-Fi AP icon appears in the header, left of the logo, with an orange **`+`** next to it when NAT is on. Tap the header to hide or show the AP page (see [section 9](#hiding-and-showing-the-ap-page)) |
 | Content | 20–235 | 216 px | Current menu, info page or keyboard |
 | Status bar | 236–299 | 64 px | Network status, always visible (dark background) |
 | Touch bar | 300–319 | 20 px | Labels of the tap zones |
@@ -148,7 +148,8 @@ When the Pi is offline the bottom row reads `Connect Pi via USB`.
 There are two kinds of input:
 
 - **Tap**: touch inside the touch bar (y ≥ 300) and lift without moving more than 14 px.
-  Taps anywhere else on the screen are ignored.
+  The only other tap zone is the **header** (y < 20): while the AP runs, a header tap
+  hides or shows the AP page. Taps anywhere else on the screen are ignored.
 - **Swipe**: move at least 22 px along one axis. Swipes work **anywhere** on the screen,
   and the axis with the larger movement decides the direction.
 
@@ -178,6 +179,8 @@ The labels change with the screen, so always check the touch bar to see what a t
 | Screen | Gesture | Action |
 |---|---|---|
 | AP active | Tap left or swipe left | **Stop the AP** |
+| Any screen except the keyboard, while the AP runs | Tap the **header** | Hide / show the AP page (the AP keeps running) |
+| Advanced → Install GUI-Pi confirm prompt | Tap right or swipe right | Start the install; any other gesture cancels |
 | System info | Tap left or swipe left | Back |
 | Keyboard | See [section 7](#7-character-picker-keyboard) | |
 
@@ -196,9 +199,10 @@ Home (status)
     └── Advanced
         ├── Start AP           → AP profile picker → AP active
         ├── Show info          → System info
-        ├── Install on Pi
+        ├── Install CLI-Pi     → Keyboard (username) → Keyboard (password) → install
+        ├── Install GUI-Pi     → confirm prompt → install
         ├── Flip display
-        ├── AP on boot [ON/OFF]
+        ├── Boot AP: <profile> → Boot AP picker (None / profile 1–4)
         └── Back
 ```
 
@@ -242,21 +246,47 @@ so you can enter the password. **OK** saves the network to a slot and connects.
 |---|---|
 | **Start AP** | Opens the AP profile picker (profiles 0–3); selecting one starts the AP |
 | **Show info** | System information screen |
-| **Install on Pi** | Starts the HID installer in Desktop mode (see [section 10](#10-install-on-pi)) |
+| **Install CLI-Pi** | Asks for the Pi username and password on the keyboard, then runs the CLI/headless installer (see [section 10](#10-install-on-pi)) |
+| **Install GUI-Pi** | Shows a confirm prompt, then runs the Desktop installer (see [section 10](#10-install-on-pi)) |
 | **Flip display** | Rotates the screen 180° |
-| **AP on boot [ON/OFF]** | Starts the AP automatically at power-on; saved in NVS |
+| **Boot AP** | Opens a list where you choose which AP profile starts automatically at power-on, or **None** (see below); saved per profile in NVS |
 | **Back** | Back to the main menu |
+
+#### Boot AP picker
+
+The **Boot AP** item shows the current choice, for example `Boot AP: none`,
+`Boot AP:<name>`, or `Boot:<name>+Hide` when that profile also has **Hide on boot** set.
+The label is green while a boot profile is set and dim when it is `none`. Long profile
+names are shortened to fit.
+
+Selecting it opens the **Boot AP** list:
+
+| Item | Meaning |
+|---|---|
+| `None` | No AP starts at boot |
+| `1: <name>` … `4: <name>` | That profile starts at boot |
+
+The current choice is shown in green, and the cursor starts on it. Swipe up/down (or tap
+NEXT) to move, and tap **SELECT** or swipe right to save and return to Advanced. Swipe
+left to go back without changing anything.
+
+Only one profile can start on boot; choosing a profile clears the flag on the others.
+**Hide on boot** is not changed from this list; set it per profile on `/ap-profiles`.
+The choice is stored in the AP profiles themselves (NVS), so it is the same setting as
+the **Start on boot** checkbox on `/ap-profiles`.
 
 ### AP active
 
 Shown while the access point is running. It displays the AP SSID, password, the IP of
 the web interface, NAT status and the number of connected clients. **Tap left or swipe
-left to stop the AP.**
+left to stop the AP.** Tap the header to hide the page; the AP keeps running (see
+[section 9](#hiding-and-showing-the-ap-page)).
 
 ### System info
 
-Shows uptime, free heap, Pi link state, the Pi's USB port (e.g. `ttyACM0`), ESP IP,
-sketch size and free OTA space. Tap left or swipe left to go back.
+Shows the firmware version and build date (e.g. `6.2` and the compile date), uptime,
+free heap, Pi link state, the Pi's USB port (e.g. `ttyACM0`), ESP IP, sketch size and
+free OTA space. The same version and build date are shown on the web page `/info`. Tap left or swipe left to go back.
 
 ---
 
@@ -267,7 +297,7 @@ Without a physical keyboard, passwords are entered with a character wheel.
 ```
 ┌──────────────────────┐
 │ az AZ 09 S1 S2 In    │  ← range tabs (current tab highlighted)
-│ ******k|             │  ← password field with cursor
+│ secretk|             │  ← password field with cursor (plain text)
 │         h            │  -2
 │         i            │  -1
 │       [ j ]          │  ← current character (large, highlighted)
@@ -280,6 +310,9 @@ Without a physical keyboard, passwords are entered with a character wheel.
 The wheel shows 5 rows: two characters before the current one, the current character
 (large and highlighted), and two after. It wraps around at both ends. When the password
 is longer than 22 characters, the field shows `...` followed by the last 19 characters.
+The text is shown in plain text, not masked, so you can check what you typed. This also
+applies to the Pi password in **Install CLI-Pi**, so make sure nobody else can see the
+screen.
 
 ### Controls
 
@@ -296,20 +329,24 @@ is longer than 22 characters, the field shows `...` followed by the last 19 char
 
 ### Range tabs
 
-| Tab | Characters |
+| Tab | Contents |
 |---|---|
-| `az` | `abcdefghijklmnopqrstuvwxyz` |
-| `AZ` | `ABCDEFGHIJKLMNOPQRSTUVWXYZ` |
-| `09` | `0123456789` |
-| `S1` | ``!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~`` |
-| `S2` | `()[]{}<>\|~` and **space** |
-| `In` | `å ä ö Å Ä Ö é è ê ë à â ç ü û ù ú î ï ô` |
+| `az` | a–z (26) |
+| `AZ` | A–Z (26) |
+| `09` | SPC (space), 0–9 (11) |
+| `S1` | `! # @ $ % & * - _ + = . , ? : ; /` (17) |
+| `S2` | `` " ' ( ) [ ] \ { } ^ ~ \| < > ` `` (15) |
+| `In` | `å ä ö Å Ä Ö é è ê ë à â ç ü û ù ú î ï ô` (20) |
 
-> **Known limitation (v6.1): the `In` tab.** The international characters are shown
-> as two-digit hex codes (for example `E5` for `å`) instead of the actual letter. The
-> right character **is** inserted into the password; only the on-screen display is
-> wrong. A fix is pending. Until then you can enter passwords with non-ASCII characters
-> from the web interface (`/profiles`) instead.
+**Space** is the first entry of the `09` tab and is shown as `SPC` on the wheel. `S1`
+holds the symbols most used in passwords, and `S2` the brackets and rarer symbols. Every
+printable ASCII symbol is in exactly one tab, so none appears twice.
+
+Since v6.2 the `In` tab shows all its characters correctly on the display: the wheel,
+the password field and the tab itself show `å ä ö Å Ä Ö é è ê ë à â ç ü û ù ú î ï ô` as
+real letters. When you press **OK** the password is converted to **UTF-8** before it is
+stored or used. That is the encoding WPA2 and the Pi login expect, so a password with
+`å`, `ä` or `ö` entered on the touch screen works the same as one entered on the web.
 
 ---
 
@@ -329,9 +366,10 @@ Open one of these:
 |---|---|---|
 | Pi networks: switch the Pi's active Wi-Fi | Main Menu → Pi networks | `/networks` (alias `/pinetworks`) |
 | ESP Wi-Fi: manage slots, push to the Pi | Main Menu → ESP Wi-Fi / Local profiles | `/profiles` |
-| Install on Pi | Advanced → Install on Pi (Desktop mode only) | `/installonpi` (Desktop and CLI) |
+| Install on Pi | Advanced → Install CLI-Pi / Install GUI-Pi | `/installonpi` (Desktop and CLI) |
 | AP mode | Advanced → Start AP | `/ap-profiles` (edit and start) |
-| System info | Advanced → Show info | `/info` |
+| AP start on boot | Advanced → Boot AP | `/ap-profiles` → **Start on boot** / **Hide on boot** |
+| System info, firmware version and build date | Advanced → Show info | `/info` |
 
 ### Web only
 
@@ -341,7 +379,7 @@ Open one of these:
 | `/terminal` | xterm.js terminal on the Pi's bash. Each browser tab gets its own session (up to 4); command history is shared between tabs (Ctrl+Up/Down) |
 | `/macros` | Manage terminal macros and quick-action buttons |
 | `/storage` | File manager for internal flash and the SD card |
-| `/ap-profiles` | Edit the 4 AP profiles (name, SSID, password, subnet, NAT) |
+| `/ap-profiles` | Edit the 4 AP profiles (name, SSID, password, subnet, NAT, start on boot, hide on boot). The status table lists each connected AP client with the last IP octet (e.g. `.2`), the manufacturer when known (Raspberry Pi, Apple, …) or the end of its MAC, and the full MAC |
 | `/update` | OTA firmware update |
 
 ### API endpoints (for scripts)
@@ -374,6 +412,8 @@ There are **4 profiles** (0–3). Each one has:
 | Password | At least 8 characters |
 | Subnet | One of four presets: `192.168.4.x`, `192.168.42.x`, `10.11.0.x`, `172.16.4.x` |
 | NAT | Internet sharing on/off |
+| Start on boot | Start this profile automatically at power-on. Only **one** profile can have it |
+| Hide on boot | Hide the AP page right after the boot start. Set separately for each profile |
 
 The first profile defaults to SSID `RigSetup`, password `MyPi1234`. Change it on
 `/ap-profiles`.
@@ -383,7 +423,31 @@ The first profile defaults to SSID `RigSetup`, password `MyPi1234`. Change it on
 - **Touch:** Advanced → Start AP → select a profile. The *AP active* screen appears. Tap
   left or swipe left to stop.
 - **Web:** `/ap-profiles` → start the selected profile.
-- **At boot:** turn on **Advanced → AP on boot**. The setting is saved in NVS.
+- **At boot:** choose a profile with **Advanced → Boot AP** on the touch screen, or tick
+  **Start on boot** on that profile's card on `/ap-profiles` and press **Save**. The
+  setting is stored per profile in NVS. At power-on the Companion starts that profile
+  and shows the *AP active* screen. If **Hide on boot** is also set for the profile, it
+  goes straight to the status screen instead, with the AP icon in the header.
+
+#### Start on boot and Hide on boot on the web
+
+Each card on `/ap-profiles` has two checkboxes above the **Save** button:
+
+- **Start on boot** is exclusive. Ticking it on one card unticks it on the other cards,
+  and when you save, the firmware clears the flag on every other profile.
+- **Hide on boot** is independent for each profile. It only has an effect for the
+  profile that has **Start on boot**.
+
+The touch setting **Advanced → Boot AP** and the web checkboxes change the same stored
+values.
+
+### Hiding and showing the AP page
+
+While the AP runs, you can **tap the header** to hide the *AP active* page and use the
+other menus. **The AP keeps running** and the web server stays reachable. The header
+then shows a small AP icon, left of the MyPi logo, with an orange **`+`** next to it
+when NAT is on. Tap the header again to go back to the *AP active* page. Header taps are
+ignored on the keyboard screen, so a half-typed password is never lost.
 
 ### NAT / internet sharing
 
@@ -417,23 +481,37 @@ For Raspberry Pi OS with a desktop and a logged-in user.
 4. When the installer reports `RIG:INSTALL_DONE`, the Companion ejects the disk, waits
    3 seconds and sends `HELLO`. The Pi row then turns green with no reboot needed.
 
-No login details are needed. Desktop mode can be started from the touch screen
-(**Advanced → Install on Pi**) or from the web page.
+No login details are needed. Desktop mode can be started from the web page or from the
+touch screen with **Advanced → Install GUI-Pi**. The touch screen first shows a confirm
+prompt (`Install GUI-Pi?`). Tap right or swipe right to start; any other tap or swipe
+cancels.
 
 ### CLI / headless mode
 
 For Raspberry Pi OS Lite, or any Pi that boots to a text console.
 
+You can start it from the web page or from the touch screen.
+
+**From the web page:**
+
 1. Open **`/installonpi`** in a browser.
 2. Choose **CLI**, enter the Pi **username and password**, and start.
-3. The Companion logs in on `tty1`, authenticates `sudo`, mounts `RIGSETUP` by label,
-   runs the installer and logs out.
 
-**Why CLI mode must be started from the web page:** the password is held in RAM only.
-It is never saved to flash and is cleared after each attempt. The touch screen has no
-way to enter credentials for this flow. If you choose Install on Pi on the touch screen
-while CLI mode is selected and no credentials are loaded, the display shows
-**"Start from web"**.
+**From the touch screen:**
+
+1. Select **Advanced → Install CLI-Pi**.
+2. The keyboard opens with the prompt **Pi username**. Enter the username and tap **OK**.
+3. The keyboard opens again with the prompt **Pi password**. Enter the password and tap
+   **OK**. The password is shown in plain text while you type it, not masked.
+4. The install starts right away.
+
+In both cases the Companion then logs in on `tty1`, authenticates `sudo`, mounts
+`RIGSETUP` by label, runs the installer and logs out.
+
+The password is held in RAM only. It is never saved to flash and is cleared after each
+attempt, so you must enter it again for every install. If an install is started in CLI
+mode without credentials loaded, the display shows **"Start from web"**; use
+**Install CLI-Pi** on the touch screen or `/installonpi` to enter them.
 
 The mode, keyboard layout and username are saved (NVS `rigcfg`). The password is not.
 
@@ -553,8 +631,10 @@ commands you type yourself are stored.
 | Web server seems to **hang** or pages load slowly | Old browser tabs (especially `/terminal` with WebSockets) are still open and use the ESP's limited connections | Close old tabs on all devices and reload the page |
 | All profiles and settings gone after an update | A `*.merged.bin` was flashed over OTA, which erased NVS | Re-enter the profiles. Always use **`.ino.bin`** for OTA |
 | Network not found in ESP Scan | The network is 5 GHz only | Use **Pi Scan…**, which finds 5 GHz networks too |
-| Passwords with `å`/`ä`/`ö` look wrong on the display | Known limitation of the `In` keyboard tab | The characters are stored correctly; or enter the password on `/profiles` |
-| "Start from web" on Install on Pi | CLI mode is selected but no credentials are loaded | Start the install from `/installonpi` and enter the username and password |
+| Passwords with `å`/`ä`/`ö` look wrong on the display | Firmware older than v6.2 | Update the firmware (see [section 11](#11-ota-firmware-update)). Since v6.2 the `In` tab shows these letters correctly and stores passwords as UTF-8 |
+| "Start from web" on Install on Pi | CLI mode is selected but no credentials are loaded | Use **Advanced → Install CLI-Pi** on the touch screen, or `/installonpi`, and enter the username and password |
+| The AP page disappeared but the AP icon is still in the header | The header was tapped, or the boot profile has **Hide on boot** set | Tap the header to show the AP page again. The AP was running the whole time |
+| The wrong AP profile starts at boot | Another profile has **Start on boot** | Check **Advanced → Boot AP**, or the checkboxes on `/ap-profiles` |
 | Typed install command looks garbled | Keyboard layout detection failed | Run the install again. Make sure the console or terminal has focus |
 | Slow internet through the AP | Software NAT on the ESP32 | Expected (a few Mbit/s). Connect directly to the uplink for large transfers |
 | `rigconsole.local` does not resolve | mDNS is not supported on the client (some Android versions, some networks) | Use the IP shown in the status bar |

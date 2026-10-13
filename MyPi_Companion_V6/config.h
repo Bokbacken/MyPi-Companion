@@ -7,6 +7,13 @@
 // ============================================================
 
 // -----------------------------------------------------------
+//  Firmware version
+// -----------------------------------------------------------
+#define FW_VERSION    "6.2"
+// __DATE__ = "Oct 13 2026" (compiler-injected, MMM DD YYYY)
+// Reformatted to "DD Mon YYYY" at runtime (see display.ino / web_server.ino)
+
+// -----------------------------------------------------------
 //  LCD SPI pins  (JD9853 / Arduino_GFX)
 // -----------------------------------------------------------
 #define LCD_PIN_DC    45
@@ -52,7 +59,7 @@
 
 // Compact menu row — single-line text + minimal padding
 #define MENU_ROW_H     18     // 8 px text + 5 px top + 5 px bottom
-#define ADV_MENU_COUNT  6     // Advanced menu: AP, info, install, flip, AP on boot, back
+#define ADV_MENU_COUNT  7     // Advanced menu: AP, info, install CLI, install GUI, flip, AP on boot, back
 
 // Status bar pixel offsets from STATUS_TOP
 #define SB_ESP_IP    14   // ESP IP address  (textSize 2, 16 px)
@@ -87,7 +94,6 @@
 #define AP_PASS_STR  "MyPi1234"
 
 // NVS keys (namespace "rigcfg")
-#define NVS_KEY_AP_BOOT   "ap_boot"   // bool: start AP automatically on boot
 
 // -----------------------------------------------------------
 //  Serial polling / offline detection
@@ -158,6 +164,8 @@ struct ApProfile {
   char    pass[65];   // WPA2 password
   uint8_t subnet;     // 0-3 (index into AP_SUBNET_DEFS)
   bool    nat;        // enable NAPT internet sharing
+  bool    onBoot;     // start this profile automatically on boot (max one slot)
+  bool    hideOnBoot; // hide the AP page right after the boot start
   bool    valid;
 };
 
@@ -183,6 +191,7 @@ enum TouchAction {
   ACT_NONE,
   ACT_TAP_LEFT, ACT_TAP_MID, ACT_TAP_RIGHT,
   ACT_SWIPE_UP, ACT_SWIPE_DOWN, ACT_SWIPE_LEFT, ACT_SWIPE_RIGHT,
+  ACT_TAP_HEADER,   // tap anywhere within the header bar (y < HDR_H)
 };
 
 // -----------------------------------------------------------
@@ -213,5 +222,6 @@ enum State {
   STATE_ADVANCED,     // AP / info / Install on Pi
   STATE_ADV_INFO,     // system diagnostics
   STATE_AP_ACTIVE,    // AP mode running
-  STATE_AP_SELECT     // AP profile selection menu (pick 0-3 before starting)
+  STATE_AP_SELECT,    // AP profile selection menu (pick 0-3 before starting)
+  STATE_AP_BOOT_SELECT // pick which AP profile to auto-start on boot
 };

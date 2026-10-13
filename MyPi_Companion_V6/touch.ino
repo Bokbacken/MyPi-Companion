@@ -12,6 +12,9 @@
 //      x < SCREEN_W*2/3      → ACT_TAP_MID
 //      x >= SCREEN_W*2/3     → ACT_TAP_RIGHT
 //      (max displacement: TAP_MAX_PX = 14)
+//    Tap in the header bar (y < HDR_H) → ACT_TAP_HEADER:
+//      while the AP runs, toggles STATE_AP_ACTIVE <-> STATE_STATUS
+//      (hidden AP shown as an icon in the header; ignored on keyboard)
 //
 //  STATE_ESP_KB dispatch:
 //    SWIPE_LEFT  → kbRangePrev()    (previous range tab)
@@ -84,6 +87,11 @@ static TouchAction _classifyGesture() {
     if (_gStartX < w3)       return ACT_TAP_LEFT;
     if (_gStartX < w3 * 2)   return ACT_TAP_MID;
     return ACT_TAP_RIGHT;
+  }
+
+  // ── Header tap (y < HDR_H) ──────────────────────────────────
+  if (absDx <= TAP_MAX_PX && absDy <= TAP_MAX_PX && _gStartY < HDR_H) {
+    return ACT_TAP_HEADER;
   }
 
   return ACT_NONE;
@@ -251,9 +259,59 @@ void kbDel() {
   updateContentArea();
 }
 
-// Confirm: save SSID+pass to NVS, try to connect, go to STATUS
+// Confirm text entry. KB_MODE_WIFI: save SSID+pass to NVS, connect, go to
+// STATUS. KB_MODE_INSTALL_USER/PASS: collect Pi login, then CLI install.
 void kbOk() {
-  // Find first empty NVS slot; overwrite last slot if all full
+  // Convert Latin-1 (KB "In" range) → UTF-8 before use (WPA2 passphrases
+  // and the Pi login are UTF-8). Never splits a 2-byte sequence on truncation.
+  {
+    char utf8pass[130] = "";  // worst case: 64 Latin-1 bytes → 128 UTF-8 bytes
+    const int maxOut = (int)sizeof(kbPass) - 1;
+    int  di = 0;
+    for (int i = 0; i < kbPassLen; i++) {
+      uint8_t c = (uint8_t)kbPass[i];
+      if (c < 0x80) {
+        if (di + 1 > maxOut) break;
+        utf8pass[di++] = (char)c;
+      } else {
+        // Latin-1 0x80..0xBF → 0xC2 xx, 0xC0..0xFF → 0xC3 xx
+        if (di + 2 > maxOut) break;
+        utf8pass[di++] = (char)(0xC0 | (c >> 6));
+        utf8pass[di++] = (char)(0x80 | (c & 0x3F));
+      }
+    }
+    utf8pass[di] = '\0';
+    strlcpy(kbPass, utf8pass, sizeof(kbPass));
+    kbPassLen = di;
+  }
+
+  if (kbMode == KB_MODE_INSTALL_USER) {
+    // Store username, ask for password next
+    strlcpy(piUser, kbPass, sizeof(piUser));
+    kbPass[0] = '\0'; kbPassLen = 0; kbRangeIdx = 0; kbCharIdx = 0;
+    kbMode = KB_MODE_INSTALL_PASS;
+    strlcpy(kbPendingSSID, "Pi password", sizeof(kbPendingSSID));
+    updateContentArea();
+    return;
+  }
+  if (kbMode == KB_MODE_INSTALL_PASS) {
+    // Store password (RAM only — hidInstallOnPi wipes it), run CLI install
+    strlcpy(piPass, kbPass, sizeof(piPass));
+    memset(kbPass, 0, sizeof(kbPass)); kbPassLen = 0;
+    kbMode = KB_MODE_WIFI;
+    currentState = STATE_ADVANCED;
+    piInstallMode = 1;   // CLI mode
+    updateContentArea();                 // Advanced header + touch bar
+    gfx->fillRect(0, CONTENT_TOP, SCREEN_W, CONTENT_H, COL_BG);
+    gfx->setTextSize(1);
+    gfx->flush();
+    hidInstallOnPi();
+    // hidInstallOnPi() leaves its result in the content area — no redraw,
+    // so the user can read it (same as the original Install on Pi item).
+    return;
+  }
+
+  // KB_MODE_WIFI — find first empty NVS slot; overwrite last slot if all full
   int freeSlot = -1;
   for (int i = 0; i < MAX_NVS_SLOTS; i++) {
     if (!nvsProfiles[i].valid) { freeSlot = i; break; }
@@ -284,12 +342,19 @@ void goBack() {
   switch (currentState) {
 
     case STATE_ESP_KB:
-      // Reset keyboard state and return to scan list
+      // Reset keyboard state and return to scan list (or Advanced when
+      // the keyboard was collecting the Pi login for a CLI install)
       kbCharIdx  = 0;
       kbRangeIdx = 0;
-      kbPass[0]  = '\0';
+      memset(kbPass, 0, sizeof(kbPass));
       kbPassLen  = 0;
-      currentState = STATE_ESP_SCAN;
+      if (kbMode != KB_MODE_WIFI) {
+        kbMode = KB_MODE_WIFI;
+        memset(piPass, 0, sizeof(piPass));
+        currentState = STATE_ADVANCED;
+      } else {
+        currentState = STATE_ESP_SCAN;
+      }
       break;
 
     case STATE_ESP_SCAN:
@@ -309,6 +374,10 @@ void goBack() {
 
     case STATE_AP_SELECT:
       advMenuIndex = 0;
+      currentState = STATE_ADVANCED;
+      break;
+
+    case STATE_AP_BOOT_SELECT:
       currentState = STATE_ADVANCED;
       break;
 
@@ -380,6 +449,11 @@ void menuNext() {
       updateContentArea();
       break;
 
+    case STATE_AP_BOOT_SELECT:
+      apBootSelectIdx = (apBootSelectIdx + 1) % (MAX_AP_PROFILES + 1);
+      updateContentArea();
+      break;
+
     default:
       break;
   }
@@ -439,6 +513,11 @@ void menuPrev() {
 
     case STATE_AP_SELECT:
       apSelectIndex = (apSelectIndex + MAX_AP_PROFILES) % (MAX_AP_PROFILES + 1);
+      updateContentArea();
+      break;
+
+    case STATE_AP_BOOT_SELECT:
+      apBootSelectIdx = (apBootSelectIdx + MAX_AP_PROFILES) % (MAX_AP_PROFILES + 1);
       updateContentArea();
       break;
 
@@ -591,15 +670,17 @@ void doSelect() {
         currentState = STATE_ADV_INFO;
         updateContentArea();
       } else if (advMenuIndex == 2) {
-        // Install rig_daemon.py — wipes content area then runs
-        gfx->fillRect(0, CONTENT_TOP, SCREEN_W, CONTENT_H, COL_BG);
-        gfx->setTextSize(1);
-        gfx->flush();
-        hidInstallOnPi();
-        // hidInstallOnPi() leaves its status on the display.
-        // Stay in STATE_ADVANCED; a redraw is NOT forced here
-        // so the user can read the result before moving on.
+        // CLI install — collect credentials via keyboard (kbOk runs it)
+        kbMode = KB_MODE_INSTALL_USER;
+        kbPass[0] = '\0'; kbPassLen = 0; kbRangeIdx = 0; kbCharIdx = 0;
+        strlcpy(kbPendingSSID, "Pi username", sizeof(kbPendingSSID));
+        currentState = STATE_ESP_KB;
+        updateContentArea();
       } else if (advMenuIndex == 3) {
+        // GUI install — show confirmation first (dispatchAction handles it)
+        advGuiConfirmPending = true;
+        updateContentArea();   // drawAdvancedMenuContent draws the overlay
+      } else if (advMenuIndex == 4) {
         // ── Flip display 180° ──────────────────────────────────
         displayFlipped = !displayFlipped;
         gfx->setRotation(displayFlipped ? 2 : 0);
@@ -607,11 +688,11 @@ void doSelect() {
           _p.putBool("flip", displayFlipped); _p.end(); }
         gfx->fillScreen(COL_BG);
         updateContentArea();
-      } else if (advMenuIndex == 4) {
-        // ── AP on boot toggle (persisted in NVS) ───────────────
-        apOnBoot = !apOnBoot;
-        { Preferences _p; _p.begin("rigcfg", false);
-          _p.putBool(NVS_KEY_AP_BOOT, apOnBoot); _p.end(); }
+      } else if (advMenuIndex == 5) {
+        // ── Boot AP: open the boot profile picker list ──
+        int cur = apBootSlot();
+        apBootSelectIdx = (cur < 0) ? 0 : cur + 1;
+        currentState = STATE_AP_BOOT_SELECT;
         updateContentArea();
       } else {
         goBack();
@@ -630,6 +711,21 @@ void doSelect() {
       updateContentArea();
       break;
 
+    // ── Boot AP picker: 0 = None, 1..4 = profile slot 0..3 ────
+    case STATE_AP_BOOT_SELECT: {
+      int slot = apBootSelectIdx - 1;    // -1 = None
+      for (int i = 0; i < MAX_AP_PROFILES; i++) {
+        bool want = (i == slot);
+        if (apProfiles[i].onBoot != want) {
+          apProfiles[i].onBoot = want;
+          saveApProfile(i);
+        }
+      }
+      currentState = STATE_ADVANCED;
+      updateContentArea();
+      break;
+    }
+
     // ── Terminal states — SELECT does nothing ─────────────────
     case STATE_ADV_INFO:
     case STATE_AP_ACTIVE:
@@ -644,6 +740,38 @@ void doSelect() {
 //  ACTION DISPATCHER
 // ============================================================
 void dispatchAction(TouchAction act) {
+
+  // ── Header tap: hide / show the AP page while the AP runs ────
+  if (act == ACT_TAP_HEADER) {
+    if (!apRunning) return;   // no AP — header tap does nothing
+    // Ignored on the keyboard so no half-typed credentials are left behind
+    if (currentState == STATE_ESP_KB) return;
+    advGuiConfirmPending = false;
+    if (currentState == STATE_AP_ACTIVE) {
+      currentState = STATE_STATUS;      // hide: header shows AP icon
+    } else {
+      currentState = STATE_AP_ACTIVE;   // un-hide: back to AP page
+    }
+    updateContentArea();
+    return;
+  }
+
+  // ── GUI install confirmation overlay ─────────────────────────
+  if (advGuiConfirmPending) {
+    advGuiConfirmPending = false;
+    if (act == ACT_TAP_RIGHT) {
+      piInstallMode = 0;   // ensure Desktop mode
+      updateContentArea();                 // menu back under header/touch bar
+      gfx->fillRect(0, CONTENT_TOP, SCREEN_W, CONTENT_H, COL_BG);
+      gfx->setTextSize(1);
+      gfx->flush();
+      hidInstallOnPi();
+      // Result stays in the content area (no redraw) so it can be read.
+    } else {
+      updateContentArea();   // any other tap/swipe cancels
+    }
+    return;
+  }
 
   // ── Keyboard: custom gesture mapping ─────────────────────────
   if (currentState == STATE_ESP_KB) {
@@ -725,6 +853,23 @@ void pollPiScan() {
   (void)piScanBusy;  // suppress unused-variable warning
 }
 
+// ============================================================
+//  pollApClients()
+//  Refreshes the AP client list while STATE_AP_ACTIVE is shown:
+//  immediately when the station count changes, otherwise ~3 s.
+// ============================================================
+void pollApClients() {
+  static uint32_t lastRefresh = 0;
+  static int      lastNum     = -1;
+  if (currentState != STATE_AP_ACTIVE) { lastNum = -1; return; }
+  int n = WiFi.softAPgetStationNum();
+  if (n != lastNum || millis() - lastRefresh >= 3000) {
+    lastNum     = n;
+    lastRefresh = millis();
+    updateContentArea();
+  }
+}
+
 
 // ============================================================
 //  CENTRAL SCREEN UPDATER
@@ -800,6 +945,12 @@ void updateContentArea() {
       drawHeader("Start AP");
       drawApSelectContent();
       drawTouchBar("NEXT", "START");
+      break;
+
+    case STATE_AP_BOOT_SELECT:
+      drawHeader("Boot AP");
+      drawApBootSelectContent();
+      drawTouchBar("NEXT", "SELECT");
       break;
 
     case STATE_AP_ACTIVE:
