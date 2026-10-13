@@ -1046,10 +1046,13 @@ void handleApiApStatus() {
   esp_wifi_get_channel(&prim, &sec);
   wifi_ps_type_t ps = WIFI_PS_NONE;
   esp_wifi_get_ps(&ps);
-  wifi_bandwidth_t apBw = WIFI_BW_HT20;
-  esp_wifi_get_bandwidth(WIFI_IF_AP, &apBw);
+  wifi_bandwidth_t apBw  = WIFI_BW_HT20;
+  wifi_bandwidth_t staBw = WIFI_BW_HT20;
+  esp_wifi_get_bandwidth(WIFI_IF_AP,  &apBw);
+  esp_wifi_get_bandwidth(WIFI_IF_STA, &staBw);
   j += ",\"channel\":"    + String(prim);
-  j += ",\"apBw\":"       + String(apBw == WIFI_BW_HT40 ? 40 : 20);
+  j += ",\"apBw\":"       + String(apBw  == WIFI_BW_HT40 ? 40 : 20);
+  j += ",\"staBw\":"      + String(staBw == WIFI_BW_HT40 ? 40 : 20);
   j += ",\"powerSave\":"  + String(ps == WIFI_PS_NONE ? "false" : "true");
   j += ",\"txPowerDbm\":" + String((int)WiFi.getTxPower() / 4.0f, 1);
   j += ",\"staDrops\":"   + String(staDropCount);

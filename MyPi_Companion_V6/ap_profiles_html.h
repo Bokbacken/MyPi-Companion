@@ -141,7 +141,7 @@ async function loadStatus(test) {
       ['Uplink (STA)', d.staConnected ? `<span class="ok">${esc(d.staSsid)}</span> ${d.staIp} (${d.staRssi} dBm)` : '<span class="bad">not connected</span>'],
       ['Uplink gateway', d.staGw],
       ['Uplink DNS', d.staDns],
-      ['Radio', `ch ${d.channel} · AP ${d.apBw} MHz · TX ${d.txPowerDbm} dBm · ` +
+      ['Radio', `ch ${d.channel} · AP ${d.apBw} MHz · STA ${d.staBw} MHz · TX ${d.txPowerDbm} dBm · ` +
                 `<span class="${cls(!d.powerSave)}">power save ${d.powerSave ? 'ON' : 'off'}</span>`],
       ['Uplink drops', d.staDrops
         ? `<span class="bad">${d.staDrops}</span> — last ${esc(d.staLastReason)}, ${d.staLastDropAgoS} s ago`
