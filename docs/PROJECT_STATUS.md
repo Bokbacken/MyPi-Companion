@@ -381,7 +381,7 @@ app partition. `FW_VERSION "6.2"`; version and build date shown on the Info scre
 | Area | Change |
 |---|---|
 | International keyboard | `In` tab shows real glyphs (Latin-1 → CP437 map); `kbOk()` converts Latin-1 → UTF-8 before saving/sending |
-| Keyboard tabs | No duplicates: `09` = SPC + digits, `S1` = 18 password symbols `!#@$%&*-_+=.,?:;/`, `S2` = 15 structural ``"'()[]\{}^~\|<>` `` |
+| Keyboard tabs | No duplicates: `09` = SPC + digits, `S1` = 17 password symbols `!#@$%&*-_+=.,?:;/`, `S2` = 15 structural ``"'()[]\{}^~\|<>` `` |
 | Install on Pi (touch) | Advanced menu split into **Install CLI-Pi** (keyboard: username → password → run; password RAM-only) and **Install GUI-Pi** (confirm overlay → run) |
 | AP hide/show | Tap the header to hide/show the AP screen; Wi-Fi arc icon in the header while the AP runs hidden; NAT `+` in `COL_ACCENT` |
 | AP on boot | Per-profile `onBoot` (exclusive) and `hideOnBoot` flags (NVS `apcfg` `a{i}boot` / `a{i}hide`, `apBootSlot()`); touch **Boot AP** opens a list (None + 4 profiles, current choice green); web AP editor has *Start on boot* / *Hide on boot* checkboxes, exclusion enforced server-side |
