@@ -121,6 +121,12 @@ char  infoMsg[64]                 = "";     // transient status (status bar line
 bool  hasInfo                     = false;
 unsigned long infoExpireMs        = 0;      // millis() when infoMsg is cleared
 
+// Pi active network interfaces (received via STATUS:IFACES:)
+PiIface piIfaces[MAX_PI_IFACES];
+int     piIfaceCount   = 0;
+int     piIfaceIdx     = 0;   // currently displayed interface
+unsigned long lastIfaceScrollMs = 0;
+
 // -----------------------------------------------------------
 //  Menu indices
 // -----------------------------------------------------------
@@ -441,5 +447,12 @@ void loop() {
     hasInfo = false;
     drawStatusBar();
     gfx->flush();
+  }
+
+  // Scroll through Pi interfaces every IFACE_SCROLL_MS
+  if (piIfaceCount > 1 && (now - lastIfaceScrollMs) >= IFACE_SCROLL_MS) {
+    lastIfaceScrollMs = now;
+    piIfaceIdx = (piIfaceIdx + 1) % piIfaceCount;
+    if (currentState == STATE_STATUS) { drawStatusBar(); gfx->flush(); }
   }
 }
