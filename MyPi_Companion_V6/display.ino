@@ -4,14 +4,16 @@
 //  Screen layout (portrait 172×320):
 //    y=  0.. 19   drawHeader()       — 20 px
 //    y= 20..235   content area       — 216 px  (MENU_ROW_H=18)
-//    y=236..299   drawStatusBar()    — 64 px   (4 lines)
+//    y=236..299   drawStatusBar()    — 64 px
 //    y=300..319   drawTouchBar()     — 20 px
 //
-//  Status bar lines:
-//    SB_LINE1 (y=240)  ESP Wi-Fi SSID
-//    SB_LINE2 (y=254)  ESP IP address
-//    SB_LINE3 (y=268)  Pi online/offline
-//    SB_LINE4 (y=282)  Pi active SSID / error detail
+//  Status bar (STATUS_TOP+offset):
+//    +2   UART 8N1 waveform ('C')
+//    +14  ESP IP address (textSize 2)
+//    +32  ESP SSID
+//    +41  thin separator line
+//    +44  Pi <iface>: <ip>  (cycles if multiple)
+//    +55  Pi SSID (wireless) / error / hint
 // ============================================================
 
 // ── Text helpers ─────────────────────────────────────────────
@@ -53,13 +55,13 @@ void drawHeader(const char *title) {
 
 
 // ============================================================
-//  STATUS BAR  — 4 lines, 64 px total
+//  STATUS BAR  — 64 px: waveform, ESP IP/SSID, separator, Pi iface/SSID
 // ============================================================
 void drawStatusBar() {
   gfx->fillRect(0, STATUS_TOP, SCREEN_W, STATUS_H, COL_STATUS_BG);
 
-  // UART 8N1 frame for 0x43 ('C', Companion): start, 8 data bits LSB first, stop.
-  // 10 bits x 17 px = 170 px, drawn as a green square wave above the text lines.
+  // ── UART 8N1 waveform for 0x43 ('C', Companion) ──────────
+  // start, 8 data bits LSB first, stop; 10 bits x 17 px = 170 px
   static const uint8_t WAVE_BITS[10] = {0, 1, 1, 0, 0, 0, 0, 1, 0, 1};
   const int BIT_W = 17;
   const int yHi = STATUS_TOP + 2;
@@ -68,72 +70,87 @@ void drawStatusBar() {
   for (int i = 0; i < 10; i++) {
     int y  = WAVE_BITS[i] ? yHi : yLo;
     int x0 = i * BIT_W;
-    if (y != prevY) {
+    if (y != prevY)
       gfx->drawFastVLine(x0, min(y, prevY), abs(y - prevY) + 1, 0x07E0);
-    }
     gfx->drawFastHLine(x0, y, BIT_W, 0x07E0);
     prevY = y;
   }
 
+  // ── ESP IP address (textSize 2) ───────────────────────────
+  int yEspIP   = STATUS_TOP + SB_ESP_IP;
+  int yEspSSID = STATUS_TOP + SB_ESP_SSID;
+  gfx->setTextSize(2);
+  if (espConnected) {
+    char ipBuf[15];
+    truncate(ipBuf, espIP, 14);          // max 14 chars x 12 px = 168 px
+    drawTxt(ipBuf, 2, yEspIP, COL_ACTIVE, COL_STATUS_BG);
+  } else {
+    drawTxt("no Wi-Fi", 2, yEspIP, COL_DIM, COL_STATUS_BG);
+  }
+
+  // ── ESP SSID (textSize 1) ─────────────────────────────────
+  gfx->setTextSize(1);
+  if (espConnected) {
+    char ssBuf[29];
+    truncate(ssBuf, espSSID, 28);        // max 28 chars x 6 px = 168 px
+    drawTxt(ssBuf, 4, yEspSSID, COL_DIM, COL_STATUS_BG);
+  }
+
+  // ── Thin separator line ───────────────────────────────────
+  gfx->drawFastHLine(4, STATUS_TOP + SB_SEP, SCREEN_W - 8, COL_BORDER);
+
+  // ── Pi interface + IP (textSize 1) ───────────────────────
+  int yPiIface = STATUS_TOP + SB_PI_IFACE;
+  int yPiSSID  = STATUS_TOP + SB_PI_SSID;
   gfx->setTextSize(1);
 
-  int y1 = STATUS_TOP + SB_LINE1;
-  int y2 = STATUS_TOP + SB_LINE2;
-  int y3 = STATUS_TOP + SB_LINE3;
-  int y4 = STATUS_TOP + SB_LINE4;
+  if (!piConnected) {
+    drawTxt("Pi: offline", 4, yPiIface, COL_ERR, COL_STATUS_BG);
+    drawTxt("Connect Pi via USB", 4, yPiSSID, COL_DIM, COL_STATUS_BG);
+  } else if (piIfaceCount > 0) {
+    int idx = piIfaceIdx % piIfaceCount;
+    // "Pi wlan0: 192.168.x.x" — snprintf truncates to 28 chars
+    char piBuf[29];
+    snprintf(piBuf, sizeof(piBuf), "Pi %s: %s",
+             piIfaces[idx].name, piIfaces[idx].ip);
+    drawTxt(piBuf, 4, yPiIface, COL_ACTIVE, COL_STATUS_BG);
 
-  // ── Line 1: ESP Wi-Fi SSID ───────────────────────────────
-  if (espConnected) {
-    char ssBuf[22];
-    truncate(ssBuf, espSSID, 21);
-    drawTxt(ssBuf, 4, y1, COL_ACTIVE, COL_STATUS_BG);
+    // SSID line: error > info > SSID for wireless iface
+    if (hasError) {
+      char errBuf[29];
+      truncate(errBuf, lastErrMsg, 28);
+      drawTxt(errBuf, 4, yPiSSID, COL_ERR, COL_STATUS_BG);
+    } else if (hasInfo) {
+      char infoBuf[29];
+      truncate(infoBuf, infoMsg, 28);
+      drawTxt(infoBuf, 4, yPiSSID, COL_ACCENT, COL_STATUS_BG);
+    } else if (strncmp(piIfaces[idx].name, "wl", 2) == 0) {
+      char ssBuf[29];
+      truncate(ssBuf, activeSSID, 28);
+      drawTxt(ssBuf, 4, yPiSSID, COL_DIM, COL_STATUS_BG);
+    }
+    // Ethernet etc.: SSID line stays blank (cleared by fillRect)
   } else {
-    drawTxt("ESP: no Wi-Fi", 4, y1, COL_DIM, COL_STATUS_BG);
+    // piConnected but no iface data yet — legacy fallback
+    drawTxt("Pi: ", 4, yPiIface, COL_DIM, COL_STATUS_BG);
+    char ssBuf[25];
+    truncate(ssBuf, activeSSID, 24);     // starts at x=28: 24 x 6 = 144 px
+    drawTxt(ssBuf, 28, yPiIface, COL_ACTIVE, COL_STATUS_BG);
+    if (hasError) {
+      char errBuf[29];
+      truncate(errBuf, lastErrMsg, 28);
+      drawTxt(errBuf, 4, yPiSSID, COL_ERR, COL_STATUS_BG);
+    } else if (hasInfo) {
+      char infoBuf[29];
+      truncate(infoBuf, infoMsg, 28);
+      drawTxt(infoBuf, 4, yPiSSID, COL_ACCENT, COL_STATUS_BG);
+    } else {
+      char ipBuf[29];
+      truncate(ipBuf, activeIP, 28);
+      drawTxt(ipBuf, 4, yPiSSID, COL_DIM, COL_STATUS_BG);
+    }
   }
-
-  // ── Line 2: ESP IP address ───────────────────────────────
-  if (espConnected) {
-    drawTxt(espIP, 4, y2, COL_DIM, COL_STATUS_BG);
-  } else {
-    drawTxt("---", 4, y2, COL_DIM, COL_STATUS_BG);
-  }
-
-  // ── Line 3: Pi status / active interface label ───────────
-  if (piConnected && piIfaceCount > 0) {
-    char nameBuf[18];
-    truncate(nameBuf, piIfaces[piIfaceIdx % piIfaceCount].name, 17);
-    char l3Buf[22];
-    snprintf(l3Buf, sizeof(l3Buf), "Pi: %s", nameBuf);
-    drawTxt(l3Buf, 4, y3, COL_ACTIVE, COL_STATUS_BG);
-  } else if (piConnected) {
-    drawTxt("Pi: ", 4, y3, COL_DIM, COL_STATUS_BG);
-    char ssBuf[22];
-    truncate(ssBuf, activeSSID, 21);
-    drawTxt(ssBuf, 28, y3, COL_ACTIVE, COL_STATUS_BG);
-  } else {
-    drawTxt("Pi: offline", 4, y3, COL_ERR, COL_STATUS_BG);
-  }
-
-  // ── Line 4: Pi IP / error / hint ─────────────────────────
-  if (hasError) {
-    char errBuf[24];
-    truncate(errBuf, lastErrMsg, 23);
-    drawTxt(errBuf, 4, y4, COL_ERR, COL_STATUS_BG);
-  } else if (hasInfo) {
-    char infoBuf[24];
-    truncate(infoBuf, infoMsg, 23);
-    drawTxt(infoBuf, 4, y4, COL_ACCENT, COL_STATUS_BG);
-  } else if (piConnected && piIfaceCount > 0) {
-    char ipBuf[24];
-    truncate(ipBuf, piIfaces[piIfaceIdx % piIfaceCount].ip, 23);
-    drawTxt(ipBuf, 4, y4, COL_DIM, COL_STATUS_BG);
-  } else if (piConnected) {
-    char ipBuf[24];
-    truncate(ipBuf, activeIP, 23);
-    drawTxt(ipBuf, 4, y4, COL_DIM, COL_STATUS_BG);
-  } else {
-    drawTxt("Connect Pi via USB", 4, y4, COL_DIM, COL_STATUS_BG);
-  }
+  gfx->setTextSize(1);   // other draw code expects size 1
 }
 
 

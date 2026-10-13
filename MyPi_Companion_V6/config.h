@@ -54,11 +54,12 @@
 #define MENU_ROW_H     18     // 8 px text + 5 px top + 5 px bottom
 #define ADV_MENU_COUNT  6     // Advanced menu: AP, info, install, flip, AP on boot, back
 
-// Status bar text baselines (y offset from STATUS_TOP)
-#define SB_LINE1       15     // ESP SSID
-#define SB_LINE2       25     // ESP IP
-#define SB_LINE3       35     // Pi status
-#define SB_LINE4       45     // Pi active SSID / error
+// Status bar pixel offsets from STATUS_TOP
+#define SB_ESP_IP    14   // ESP IP address  (textSize 2, 16 px)
+#define SB_ESP_SSID  32   // ESP SSID        (textSize 1)
+#define SB_SEP       41   // thin separator  (1 px line)
+#define SB_PI_IFACE  44   // Pi iface: IP    (textSize 1)
+#define SB_PI_SSID   55   // Pi SSID / hint  (textSize 1)
 
 // Touch tap zone
 #define TOUCH_X_MID   (SCREEN_W / 2)
@@ -165,11 +166,11 @@ struct PiProfile {
 
 // Pi active network interfaces (STATUS:IFACES:), cycled in status bar
 #define MAX_PI_IFACES      6        // max tracked active interfaces
-#define PI_IFACE_NAME_LEN 14        // "wlan0 SSIDNAM" + NUL
+#define PI_IFACE_NAME_LEN 16        // raw iface name, e.g. "docker0" + NUL
 #define IFACE_SCROLL_MS   3000UL    // ms between iface scroll steps
 
 struct PiIface {
-  char name[PI_IFACE_NAME_LEN];     // e.g. "eth0" or "wlan0 TOFTA"
+  char name[PI_IFACE_NAME_LEN];     // e.g. "eth0" or "wlan0"
   char ip[16];                      // e.g. "192.168.1.5"
 };
 
