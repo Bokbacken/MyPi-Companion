@@ -73,6 +73,11 @@ extern volatile uint8_t  staLastReason;
 extern volatile uint32_t staLastDropMs;
 extern uint32_t loopMaxUs, loopMaxPrevUs;
 
+// Install progress defined in hid.ino (concatenated before this file).
+extern char     hidStatusMsg[2][24];
+extern bool     hidStatusErr[2];
+extern volatile bool hidInstallActive;
+
 
 // ============================================================
 //  BASIC HTTP HANDLERS
@@ -229,6 +234,18 @@ void handleApiInstallOnPi() {
 }
 
 
+// GET /api/installstatus — live install progress for the web page
+void handleApiInstallStatus() {
+  char line0[28], line1[28];
+  snprintf(line0, sizeof(line0), "%s", hidStatusMsg[0]);
+  snprintf(line1, sizeof(line1), "%s", hidStatusMsg[1]);
+  String json = String("{\"running\":") + (hidInstallActive ? "true" : "false") +
+                ",\"err\":"  + ((hidStatusErr[0] || hidStatusErr[1]) ? "true" : "false") +
+                ",\"line0\":\"" + line0 + "\"" +
+                ",\"line1\":\"" + line1 + "\"}";
+  server.send(200, "application/json", json);
+}
+
 // ============================================================
 //  PROFILE MANAGER HANDLERS  (NVS slots — shared pool)
 // ============================================================
@@ -264,6 +281,32 @@ void handleApiPiProfiles() {
     if (i > 0) json += ",";
     json += "{\"ssid\":\""; json += piProfiles[i].ssid;
     json += "\",\"pass\":\""; json += piProfiles[i].pass; json += "\"}";
+  }
+  json += "]";
+  server.send(200, "application/json", json);
+}
+
+// GET /api/piconns — NetworkManager connection names (from PROFILES:, sent by
+// the daemon after HELLO and after ADDWIFI). These are what CMD:CONNECT needs
+// and what STATUS:CONN reports; on newer Pi OS they look like
+// "netplan-wlan0-<SSID>", which is not the SSID from /api/piprofiles.
+void handleApiPiConns() {
+  // Empty list while the Pi is connected = we missed PROFILES:. Re-send HELLO
+  // (daemon answers with ACK + PROFILES + STATUS), at most every 10 s.
+  static unsigned long lastAsk = 0;
+  if (numDynProfiles == 0 && piConnected && millis() - lastAsk > 10000UL) {
+    lastAsk = millis();
+    Serial.println("HELLO");
+  }
+  String json = "[";
+  for (int i = 0; i < numDynProfiles; i++) {
+    if (i > 0) json += ",";
+    json += "\"";
+    for (const char *c = dynProfiles[i]; *c; c++) {
+      if (*c == '"' || *c == '\\') json += '\\';
+      json += *c;
+    }
+    json += "\"";
   }
   json += "]";
   server.send(200, "application/json", json);
@@ -713,12 +756,14 @@ void startWebServer() {
   server.on("/api/info",  handleApiInfo);
   server.on("/addwifi",   HTTP_POST, handleAddWifi);
   server.on("/api/installonpi", HTTP_POST, handleApiInstallOnPi);
-  server.on("/api/installcfg",  HTTP_GET,  handleApiInstallCfg);
+  server.on("/api/installcfg",    HTTP_GET,  handleApiInstallCfg);
+  server.on("/api/installstatus", HTTP_GET,  handleApiInstallStatus);
 
   // ── NVS profile manager ────────────────────────────────────
   server.on("/profiles",          handleProfiles);
   server.on("/api/nvs",           handleApiNvs);
   server.on("/api/piprofiles",    handleApiPiProfiles);
+  server.on("/api/piconns",       handleApiPiConns);
   server.on("/api/reqpiprofiles", HTTP_POST, handleApiReqPiProfiles);
   server.on("/api/nvssave",       HTTP_POST, handleApiNvsSave);
   server.on("/api/nvsdel",        HTTP_POST, handleApiNvsDel);

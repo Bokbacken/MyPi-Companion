@@ -94,6 +94,7 @@
 // -----------------------------------------------------------
 #define POLL_INTERVAL_MS   5000UL
 #define PI_TIMEOUT_MS     15000UL
+#define HELLO_RETRY_MS     2000UL   // resend HELLO while the Pi has the port open but no ACK yet
 
 // -----------------------------------------------------------
 //  Touch debounce + gesture thresholds

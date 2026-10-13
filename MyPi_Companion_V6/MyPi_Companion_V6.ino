@@ -450,6 +450,18 @@ static void _loopBody() {
 
   unsigned long now = millis();
 
+  // Handshake retry. The HELLO from setup() is lost when the daemon
+  // is not running yet (Pi still booting): with nobody holding the
+  // ACM port open, USBCDC drops the write. (bool)Serial is true only
+  // while the host has the port open (DTR), so nothing is sent until
+  // the daemon opens it. Repeat because the daemon waits ~1.5 s and
+  // flushes its input buffer right after opening.
+  static unsigned long lastHelloMs = 0;
+  if (!piConnected && Serial && (now - lastHelloMs) >= HELLO_RETRY_MS) {
+    Serial.println("HELLO");
+    lastHelloMs = now;
+  }
+
   // Poll Pi every POLL_INTERVAL_MS (after first ACK)
   if (lastStatusMs > 0 && (now - lastPollMs) > POLL_INTERVAL_MS) {
     Serial.println("CMD:GET_STATUS");
