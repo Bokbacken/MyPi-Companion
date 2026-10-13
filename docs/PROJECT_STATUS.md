@@ -1,9 +1,12 @@
 # MyPi-Companion — Project Status
 
-_Last updated: October 2026 — current firmware: **v6 (in progress)**, last release tag `v5`_
+_Last updated: 2026-10-13 — current firmware: **v6.1 (released)**, release tag `v6.1`_
 
-> **v4 is locked.** It is preserved as git tag `v4` (commit `a282ba8`).
-> All new work happens in `MyPi_Companion_V6/` on feature branches.
+> End-user documentation: [USER_GUIDE.md](USER_GUIDE.md).
+
+> **Release tags:** `v4` (commit `a282ba8`), `v5`, `v6.0-hms-final` (commit `20dbba4`,
+> last state before the MyPi rebrand), `v6.1` (commit `c2cbb31`, current release).
+> All new work happens in `MyPi_Companion_V6/` on feature branches; never push to `main`.
 
 ---
 
@@ -29,7 +32,7 @@ xterm.js terminal. It enumerates as a USB composite device: CDC-ACM + HID keyboa
 | **Buttons** | None — touch-only UI |
 | **USB** | TinyUSB composite: CDC-ACM + HID keyboard + MSC |
 | **Pi link** | USB cable → `/dev/ttyACM0` on the Pi |
-| **Access point** | SSID `RigSetup`, IP `192.168.4.1` (password in `config.h`) |
+| **Access point** | SSID `RigSetup`, password `MyPi1234`, IP `192.168.4.1` (defaults in `config.h`) |
 | **mDNS** | `rigconsole.local` (STA and AP mode) |
 
 ---
@@ -362,5 +365,35 @@ commit both. The script asserts: no FitAddon, `termFit` present, vertical QB pre
       AP clients always get DNS `1.1.1.1` when NAT is on (upstream/hotel DNS is private and
       unreachable through NAPT). Throughput ~6/3–4 Mbit/s (software NAPT on the ESP32;
       fine for SSH/terminal/web) vs 112/120 Mbit/s directly on the hotel Wi-Fi.
-- [ ] Test CLI install on a fresh Raspberry Pi OS Lite (64-bit) on hardware
-- [ ] Re-test Desktop install (regression)
+
+## v6.1 — released 2026-10-13
+
+Tagged `v6.1` at `c2cbb31` (merge of PR #18). **All items below are hardware-verified.**
+Build: ~54 % of the 3 MB app partition (core 3.3.12, GFX 1.6.9, WebSockets 2.7.2).
+
+### What is new in v6.1 compared with v6.0 (`v6.0-hms-final`)
+
+| Area | Change | PR |
+|---|---|---|
+| Branding | Sketch renamed to `MyPi_Companion_V6/`; all HMS/Anybus references removed; AP password `MyPi1234`; USB MSC vendor ID `MyPi` (firmware + daemon) | #12 |
+| Display / web polish | Orange separator line above the waveform and orange header borders removed; header margins 8 → 10 px | #13 |
+| Pi interfaces | Daemon sends `STATUS:IFACES:` with all active IPv4 interfaces; status bar cycles them every 3 s | #14 |
+| Status bar redesign | ESP IP in large font (full IPv4 fits), ESP SSID, visible grey ESP/Pi separator, `Pi <iface>: <ip>` row, SSID row shown only for wireless interfaces; iface names sent without SSID | #15, #16 |
+| AP + STA performance | AP runs on the STA channel at 20 MHz, STA locked to HT20 before connect, Wi-Fi power save off; AP/STA diagnostics incl. STA bandwidth | #17 |
+| Install on Pi | CLI cleanup sent as one command line so the logout is not lost; install status mirrored to `/api/installstatus` for live web feedback | #18 |
+| Serial link | `HELLO` retried every 2 s until `ACK` while the host has the port open (connects automatically when the Pi boots) | #18 |
+| Pi Networks page | Lists NM connection names from `PROFILES:` (fixes empty list) | #18 |
+| Docs | New end-user guide `docs/USER_GUIDE.md` | this PR |
+
+v6.0 features (multi-session terminal, AP profiles, NAT, CLI install mode, install
+settings in NVS) are listed in the v6 status section above and are carried over unchanged.
+
+### Pending (next release)
+
+- [ ] **International keyboard tab (`In`)**: characters are displayed as 2-digit hex codes
+      (e.g. `E5` for `å`) instead of glyphs. Insertion into the password buffer is correct;
+      only rendering needs fixing (CP437 glyphs 0xE5..0xF4).
+- [ ] **Install on Pi from the touch menu**: CLI mode currently shows "Start from web" when
+      no credentials are loaded (password is RAM-only by design); decide on a touch flow.
+- [ ] **Desktop install regression on a re-imaged Lite card**: re-test and fix Desktop mode
+      on a card that was re-imaged from Raspberry Pi OS Lite.
