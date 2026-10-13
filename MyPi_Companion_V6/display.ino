@@ -9,9 +9,9 @@
 //
 //  Status bar (STATUS_TOP+offset):
 //    +2   UART 8N1 waveform ('C')
-//    +14  ESP IP address (textSize 2)
+//    +14  ESP IP address (textSize 2, narrow dots — fits 255.255.255.255)
 //    +32  ESP SSID
-//    +41  thin separator line
+//    +41  grey separator line (ESP above / Pi below)
 //    +44  Pi <iface>: <ip>  (cycles if multiple)
 //    +55  Pi SSID (wireless) / error / hint
 // ============================================================
@@ -37,6 +37,24 @@ static void drawCentredTxt(const char *s, int16_t cx, int16_t y,
 // Truncate string to maxChars into buf (including NUL)
 static void truncate(char *buf, const char *src, int maxChars) {
   strlcpy(buf, src, maxChars + 1);
+}
+
+// Draw an IPv4 address at the current text size with narrow dots:
+// digits advance 6*size px, '.' advances 3*size px. At size 2 the
+// worst case "255.255.255.255" is 12*12 + 3*6 = 162 px, so it fits
+// the 172 px screen from x=4. Characters that would cross the right
+// edge are not drawn.
+static void drawCompactIP(const char *ip, int16_t x, int16_t y, uint16_t fg) {
+  const uint8_t sz = 2;
+  for (const char *p = ip; *p; p++) {
+    bool dot = (*p == '.');
+    int16_t adv = dot ? 3 * sz : 6 * sz;
+    if (x + adv > SCREEN_W) break;
+    // '.' glyph occupies font columns 1-2; shift left 1 px to centre it
+    // in its narrow slot. Transparent (fg==bg) so neighbours are untouched.
+    gfx->drawChar(dot ? x - 1 : x, y, *p, fg, fg);
+    x += adv;
+  }
 }
 
 
@@ -81,9 +99,7 @@ void drawStatusBar() {
   int yEspSSID = STATUS_TOP + SB_ESP_SSID;
   gfx->setTextSize(2);
   if (espConnected) {
-    char ipBuf[15];
-    truncate(ipBuf, espIP, 14);          // max 14 chars x 12 px = 168 px
-    drawTxt(ipBuf, 2, yEspIP, COL_ACTIVE, COL_STATUS_BG);
+    drawCompactIP(espIP, 4, yEspIP, COL_ACTIVE);
   } else {
     drawTxt("no Wi-Fi", 2, yEspIP, COL_DIM, COL_STATUS_BG);
   }
@@ -96,8 +112,8 @@ void drawStatusBar() {
     drawTxt(ssBuf, 4, yEspSSID, COL_DIM, COL_STATUS_BG);
   }
 
-  // ── Thin separator line ───────────────────────────────────
-  gfx->drawFastHLine(4, STATUS_TOP + SB_SEP, SCREEN_W - 8, COL_BORDER);
+  // ── Separator between ESP and Pi sections ─────────────────
+  gfx->drawFastHLine(4, STATUS_TOP + SB_SEP, SCREEN_W - 8, COL_SEP);
 
   // ── Pi interface + IP (textSize 1) ───────────────────────
   int yPiIface = STATUS_TOP + SB_PI_IFACE;

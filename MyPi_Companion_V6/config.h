@@ -76,6 +76,7 @@
 #define COL_DIM       ((uint16_t)0x7BEF)
 #define COL_ACTIVE    ((uint16_t)0x07E0)
 #define COL_BORDER    ((uint16_t)0x2104)
+#define COL_SEP       ((uint16_t)0x7BEF)   // status bar ESP/Pi separator (mid grey)
 #define COL_STATUS_BG ((uint16_t)0x0842)
 #define COL_ERR       ((uint16_t)0xF800)
 
