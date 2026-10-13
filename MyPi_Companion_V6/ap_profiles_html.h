@@ -104,11 +104,22 @@ function cardHtml(p) {
     </div>
     <label>Subnet</label><select id="sub${p.slot}">${opts}</select>
     <label class="chk"><input type="checkbox" id="nat${p.slot}"${p.nat ? ' checked' : ''}> Share internet (NAT)</label>
+    <label class="chk"><input type="checkbox" id="boot${p.slot}"${p.onBoot ? ' checked' : ''} onchange="bootChanged(${p.slot},this)"> Start on boot</label>
+    <label class="chk"><input type="checkbox" id="hide${p.slot}"${p.hideOnBoot ? ' checked' : ''}> Hide on boot</label>
     <div class="btns">
       <button onclick="saveProfile(${p.slot})">Save</button>
       <button class="primary" onclick="startAp(${p.slot})">Start AP</button>
     </div>
   </div>`;
+}
+
+// Only one profile can start on boot: uncheck the others in the UI
+// (the firmware also clears them when this profile is saved).
+function bootChanged(slot, cb) {
+  if (!cb.checked) return;
+  document.querySelectorAll('input[id^="boot"]').forEach(el => {
+    if (el !== cb) el.checked = false;
+  });
 }
 
 async function load() {
@@ -131,7 +142,9 @@ async function post(url, data) {
 async function saveProfile(slot) {
   const g = id => document.getElementById(id + slot);
   const data = { slot, name: g('name').value.trim(), ssid: g('ssid').value.trim(),
-                 subnet: g('sub').value, nat: g('nat').checked ? '1' : '0' };
+                 subnet: g('sub').value, nat: g('nat').checked ? '1' : '0',
+                 onBoot: g('boot').checked ? '1' : '0',
+                 hideOnBoot: g('hide').checked ? '1' : '0' };
   const pw = g('pass').value;
   if (!data.ssid) { toast('SSID must not be empty', true); return; }
   if (pw && pw !== 'unchanged') {

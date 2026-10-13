@@ -94,7 +94,6 @@
 #define AP_PASS_STR  "MyPi1234"
 
 // NVS keys (namespace "rigcfg")
-#define NVS_KEY_AP_BOOT   "ap_boot"   // bool: start AP automatically on boot
 
 // -----------------------------------------------------------
 //  Serial polling / offline detection
@@ -165,6 +164,8 @@ struct ApProfile {
   char    pass[65];   // WPA2 password
   uint8_t subnet;     // 0-3 (index into AP_SUBNET_DEFS)
   bool    nat;        // enable NAPT internet sharing
+  bool    onBoot;     // start this profile automatically on boot (max one slot)
+  bool    hideOnBoot; // hide the AP page right after the boot start
   bool    valid;
 };
 

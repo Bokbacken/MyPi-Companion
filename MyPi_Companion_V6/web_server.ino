@@ -906,6 +906,8 @@ void handleApiGetApProfiles() {
     json += ",\"nat\":"    + String(apProfiles[i].nat ? "true" : "false");
     json += ",\"valid\":"  + String(apProfiles[i].valid ? "true" : "false");
     json += ",\"active\":" + String((apRunning && activeApProfile == i) ? "true" : "false");
+    json += ",\"onBoot\":"     + String(apProfiles[i].onBoot ? "true" : "false");
+    json += ",\"hideOnBoot\":" + String(apProfiles[i].hideOnBoot ? "true" : "false");
     json += "}";
   }
   json += "]";
@@ -936,6 +938,18 @@ void handleApiSaveApProfile() {
     apProfiles[slot].subnet = (sub >= 0 && sub < MAX_AP_PROFILES) ? sub : 0;
   }
   if (server.hasArg("nat")) apProfiles[slot].nat = (server.arg("nat") == "1" || server.arg("nat") == "true");
+  if (server.hasArg("hideOnBoot"))
+    apProfiles[slot].hideOnBoot = (server.arg("hideOnBoot") == "1" || server.arg("hideOnBoot") == "true");
+  if (server.hasArg("onBoot")) {
+    bool ob = (server.arg("onBoot") == "1" || server.arg("onBoot") == "true");
+    apProfiles[slot].onBoot = ob;
+    if (ob) {
+      // Only one profile may start on boot: clear the flag elsewhere
+      for (int i = 0; i < MAX_AP_PROFILES; i++) {
+        if (i != slot && apProfiles[i].onBoot) { apProfiles[i].onBoot = false; saveApProfile(i); }
+      }
+    }
+  }
   saveApProfile(slot);
   server.send(200, "text/plain", "Saved AP profile " + String(slot + 1));
   if (currentState == STATE_AP_SELECT) updateContentArea();   // refresh names on display

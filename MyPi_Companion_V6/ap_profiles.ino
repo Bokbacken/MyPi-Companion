@@ -1,7 +1,8 @@
 // ============================================================
 //  ap_profiles.ino — 4 configurable AP profiles (NVS namespace "apcfg")
 //
-//  Keys per slot N (0-3): aNv, aNname, aNssid, aNpass, aNsub, aNnat
+//  Keys per slot N (0-3): aNv, aNname, aNssid, aNpass, aNsub, aNnat,
+//                         aNboot, aNhide
 //  Defaults are written on first boot (namespace has no "a0v" key).
 // ============================================================
 
@@ -33,6 +34,8 @@ static void _apWriteDefaults() {
     snprintf(key, sizeof(key), "a%dpass", i); w.putString(key, AP_PASS_STR);
     snprintf(key, sizeof(key), "a%dsub", i);  w.putUChar(key, defSubs[i]);
     snprintf(key, sizeof(key), "a%dnat", i);  w.putBool(key, defNat[i]);
+    snprintf(key, sizeof(key), "a%dboot", i); w.putBool(key, false);
+    snprintf(key, sizeof(key), "a%dhide", i); w.putBool(key, false);
   }
   w.end();
   Serial.println("[AP] Wrote default AP profiles to NVS");
@@ -62,6 +65,10 @@ void loadApProfiles() {
     if (apProfiles[i].subnet >= MAX_AP_PROFILES) apProfiles[i].subnet = 0;
     snprintf(key, sizeof(key), "a%dnat", i);
     apProfiles[i].nat = r.getBool(key, false);
+    snprintf(key, sizeof(key), "a%dboot", i);
+    apProfiles[i].onBoot = r.getBool(key, false);
+    snprintf(key, sizeof(key), "a%dhide", i);
+    apProfiles[i].hideOnBoot = r.getBool(key, false);
 
     // Never leave a slot unusable: fall back to safe values
     if (!apProfiles[i].name[0]) snprintf(apProfiles[i].name, sizeof(apProfiles[i].name), "AP %d", i + 1);
@@ -82,6 +89,16 @@ void saveApProfile(int slot) {
   snprintf(key, sizeof(key), "a%dpass", slot); prefs.putString(key, apProfiles[slot].pass);
   snprintf(key, sizeof(key), "a%dsub", slot);  prefs.putUChar(key, apProfiles[slot].subnet);
   snprintf(key, sizeof(key), "a%dnat", slot);  prefs.putBool(key, apProfiles[slot].nat);
+  snprintf(key, sizeof(key), "a%dboot", slot); prefs.putBool(key, apProfiles[slot].onBoot);
+  snprintf(key, sizeof(key), "a%dhide", slot); prefs.putBool(key, apProfiles[slot].hideOnBoot);
   prefs.end();
   apProfiles[slot].valid = true;
+}
+
+// First valid slot flagged to start on boot, or -1 if none.
+int apBootSlot() {
+  for (int i = 0; i < MAX_AP_PROFILES; i++) {
+    if (apProfiles[i].valid && apProfiles[i].onBoot) return i;
+  }
+  return -1;
 }

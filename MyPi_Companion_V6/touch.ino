@@ -675,18 +675,29 @@ void doSelect() {
         gfx->fillScreen(COL_BG);
         updateContentArea();
       } else if (advMenuIndex == 5) {
-        // ── AP on boot: cycle OFF → ON → ON+HIDE → OFF (NVS) ──
-        if (!apOnBoot) {
-          apOnBoot = true;  apHideOnBoot = false;
-        } else if (!apHideOnBoot) {
-          apHideOnBoot = true;
-        } else {
-          apOnBoot = false; apHideOnBoot = false;
+        // ── Boot AP: 9-state cycle, stored per profile (NVS) ──
+        //  none → P1 → P1+Hide → P2 → … → P4+Hide → none
+        int  cur     = apBootSlot();
+        bool curHide = (cur >= 0) && apProfiles[cur].hideOnBoot;
+        int  nextSlot;
+        bool nextHide = false;
+        if (cur < 0)       { nextSlot = 0; }
+        else if (!curHide) { nextSlot = cur; nextHide = true; }
+        else               { nextSlot = cur + 1; }
+        // Skip invalid slots; past the last slot wraps to "none"
+        while (nextSlot >= 0 && nextSlot < MAX_AP_PROFILES && !apProfiles[nextSlot].valid) {
+          nextSlot++; nextHide = false;
         }
-        { Preferences _p; _p.begin("rigcfg", false);
-          _p.putBool(NVS_KEY_AP_BOOT, apOnBoot);
-          _p.putBool("apHideBoot", apHideOnBoot);
-          _p.end(); }
+        if (nextSlot >= MAX_AP_PROFILES) nextSlot = -1;
+        for (int i = 0; i < MAX_AP_PROFILES; i++) {
+          bool wantBoot = (i == nextSlot);
+          bool wantHide = wantBoot ? nextHide : apProfiles[i].hideOnBoot;
+          if (apProfiles[i].onBoot != wantBoot || apProfiles[i].hideOnBoot != wantHide) {
+            apProfiles[i].onBoot     = wantBoot;
+            apProfiles[i].hideOnBoot = wantHide;
+            saveApProfile(i);
+          }
+        }
         updateContentArea();
       } else {
         goBack();

@@ -85,7 +85,7 @@ void drawHeader(const char *title) {
     gfx->fillArc(ax, ay, 10, 9, 210, 330, COL_ACCENT);      // outer arc
     // If NAT is active, add a small '+' to the right of the icon
     if (apNatActive()) {
-      drawTxt("+", ax + 11, HDR_H / 2 - 4, COL_ACTIVE, COL_HDR_BG);
+      drawTxt("+", ax + 11, HDR_H / 2 - 4, COL_ACCENT, COL_HDR_BG);
     }
   }
 }
@@ -758,18 +758,16 @@ void drawAdvancedMenuContent() {
     return;
   }
 
-  // AP on boot: cycle OFF → ON → ON+HIDE
-  const char *apBootLabel;
-  uint16_t    apBootColor;
-  if (!apOnBoot) {
-    apBootLabel = "AP on boot  [OFF]";
-    apBootColor = COL_DIM;
-  } else if (!apHideOnBoot) {
-    apBootLabel = "AP on boot  [ON]";
-    apBootColor = COL_ACTIVE;
+  // Boot AP: per-profile flag (none / profile / profile+Hide)
+  char     apBootBuf[22];
+  int      bs        = apBootSlot();
+  uint16_t apBootCol = (bs >= 0) ? COL_ACTIVE : COL_DIM;
+  if (bs < 0) {
+    strlcpy(apBootBuf, "Boot AP: none", sizeof(apBootBuf));
+  } else if (apProfiles[bs].hideOnBoot) {
+    snprintf(apBootBuf, sizeof(apBootBuf), "Boot:%.10s+Hide", apProfiles[bs].name);
   } else {
-    apBootLabel = "AP on boot [ON+HIDE]";
-    apBootColor = COL_ACCENT;
+    snprintf(apBootBuf, sizeof(apBootBuf), "Boot AP:%.11s", apProfiles[bs].name);
   }
 
   const MenuItem items[ADV_MENU_COUNT] = {
@@ -778,7 +776,7 @@ void drawAdvancedMenuContent() {
     { "Install CLI-Pi",   COL_TEXT },
     { "Install GUI-Pi",   COL_TEXT },
     { "Flip display",     COL_TEXT },
-    { apBootLabel,        apBootColor },
+    { apBootBuf,          apBootCol   },
     { "<- Back",          COL_DIM  },
   };
   drawMenuList(items, ADV_MENU_COUNT, advMenuIndex, 0);

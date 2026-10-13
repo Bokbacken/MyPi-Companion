@@ -81,9 +81,7 @@ Arduino_Canvas_PSRAM *gfx    = nullptr;
 // AP profiles (loaded from NVS on boot — ap_profiles.ino)
 ApProfile   apProfiles[MAX_AP_PROFILES];
 int         activeApProfile = 0;    // last started AP slot
-bool        apOnBoot        = false; // NVS: start AP automatically on boot
 bool        apRunning       = false; // true while softAP is up, regardless of display state
-bool        apHideOnBoot    = false; // NVS: hide AP page immediately after boot start
 int         apSelectIndex   = 0;    // cursor in STATE_AP_SELECT menu
 // Runtime AP network settings (populated by startAP(slot))
 IPAddress   dynApIp, dynApGw, dynApSn;
@@ -341,8 +339,6 @@ void setup() {
   // Load display-flip preference (same "rigcfg" namespace)
   { Preferences _p; _p.begin("rigcfg", true);
     displayFlipped = _p.getBool("flip", false);
-    apOnBoot       = _p.getBool(NVS_KEY_AP_BOOT, false);
-    apHideOnBoot   = _p.getBool("apHideBoot", false);
     // Install target (password is never stored)
     piInstallMode = _p.getUChar("instMode", 0);
     piLayoutForce = _p.getChar("instLayout", -1);
@@ -389,10 +385,12 @@ void setup() {
   // ---- AP on boot -----------------------------------------
   //  Nothing else starts the AP during setup(). Switch to the AP
   //  screen so loop() services the web server even without STA.
-  if (apOnBoot && currentState != STATE_AP_ACTIVE) {
-    startAP(activeApProfile);   // sets apRunning
+  //  The boot slot and hide flag are stored per AP profile.
+  int bootSlot = apBootSlot();
+  if (bootSlot >= 0) {
+    startAP(bootSlot);          // sets apRunning + activeApProfile
     currentState = STATE_AP_ACTIVE;
-    if (apHideOnBoot) {
+    if (apProfiles[bootSlot].hideOnBoot) {
       currentState = STATE_STATUS;   // header shows AP icon (apRunning)
     }
     updateContentArea();
