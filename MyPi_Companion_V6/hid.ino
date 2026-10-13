@@ -352,14 +352,21 @@ static bool hidCliMount(const String &port) {
   return false;
 }
 
-// Undo what the CLI flow did on the console. Typed ahead is fine:
-// the tty buffers it until the running command returns.
+// Undo what the CLI flow did on the console, as ONE command line.
+// Type-ahead is NOT safe here: Debian's sudoers sets "use_pty", so
+// while a sudo command runs, sudo relays the console input into the
+// command's own pty, where it is echoed and then discarded. A
+// separately typed "exit" got lost that way and left tty1 logged in.
+// Chaining with ";" means nothing is typed while sudo is running.
+// The short delay lets install.sh (itself run via sudo) finish
+// printing its banner and exit after RIG:INSTALL_DONE.
 static void hidCliCleanup(bool mounted, bool weLoggedIn) {
-  if (mounted) {
-    String cmd = String("cd /; sudo umount ") + HID_CLI_MNT + " 2>/dev/null";
-    hidType(cmd.c_str());
-  }
-  if (weLoggedIn) hidType("exit");  // leave the console at the login prompt
+  delay(1500);
+  String cmd;
+  if (mounted) cmd = String("cd /; sudo umount ") + HID_CLI_MNT + " 2>/dev/null; ";
+  cmd += "sudo -k";                       // drop the cached sudo credentials
+  if (weLoggedIn) cmd += "; exit";        // leave the console at the login prompt
+  hidType(cmd.c_str());
 }
 
 // ----------------------------------------------------------
