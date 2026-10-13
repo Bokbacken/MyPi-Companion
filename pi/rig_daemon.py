@@ -34,6 +34,7 @@ Pi → ESP32:
   STATUS:SSID:<ssid>           — current Wi-Fi SSID (or NONE)
   STATUS:CONN:<name>           — current NetworkManager connection name (or NONE)
   STATUS:IP:<ip>               — current IP (or NONE)
+  STATUS:IFACES:<n>:<ip>,...   — all active IPv4 interfaces (or NONE)
   STATUS:PORT:<device>         — USB serial port in use (e.g. /dev/ttyACM0)
   OK:CONNECT:<profile>         — connection succeeded
   ERR:CONNECT:<profile>        — connection failed
@@ -64,7 +65,7 @@ import subprocess
 import sys
 import threading
 import time
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import serial  # apt-get install python3-serial
 
@@ -173,6 +174,39 @@ def get_current_ip() -> str:
             addr = line.split(":", 1)[-1].strip().split("/")[0]
             return addr if addr and addr != "--" else "NONE"
     return "NONE"
+
+
+def get_active_ifaces() -> List[Tuple[str, str]]:
+    """Return (display_name, ip) for all active non-loopback IPv4 interfaces.
+
+    Uses 'ip -4 -o addr show' (always available on Raspberry Pi OS).
+    For the Wi-Fi interface the current SSID is appended to the name.
+    Example: [("eth0", "192.168.1.5"), ("wlan0 TOFTA", "10.0.0.3")]
+    """
+    result: List[Tuple[str, str]] = []
+    try:
+        out = subprocess.check_output(
+            ["ip", "-4", "-o", "addr", "show"],
+            text=True, timeout=5,
+        )
+        wifi_ssid = get_current_ssid()   # "NONE" if not connected
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) < 4:
+                continue
+            iface = parts[1]
+            if iface == "lo":
+                continue
+            ip = parts[3].split("/")[0]
+            if iface == WIFI_IFACE and wifi_ssid != "NONE":
+                name = f"{iface} {wifi_ssid}"   # e.g. "wlan0 TOFTA"
+            else:
+                name = iface                     # e.g. "eth0"
+            # ',' separates entries in STATUS:IFACES — keep it out of names
+            result.append((name.replace(",", " "), ip))
+    except Exception as exc:
+        log.warning("get_active_ifaces error: %s", exc)
+    return result
 
 
 def connect_profile(profile: str) -> bool:
@@ -451,6 +485,11 @@ def send_status(ser: serial.Serial) -> None:
     send(ser, f"STATUS:CONN:{conn}")
     time.sleep(0.05)
     send(ser, f"STATUS:IP:{ip}")
+    time.sleep(0.05)
+    # Active interface list for display scrolling
+    ifaces = get_active_ifaces()
+    payload = ",".join(f"{n}:{ip_}" for n, ip_ in ifaces) if ifaces else "NONE"
+    send(ser, f"STATUS:IFACES:{payload}")
     time.sleep(0.05)
     send(ser, f"STATUS:PORT:{_active_port}")
 

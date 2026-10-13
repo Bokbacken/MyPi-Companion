@@ -163,6 +163,16 @@ struct PiProfile {
   char pass[65];
 };
 
+// Pi active network interfaces (STATUS:IFACES:), cycled in status bar
+#define MAX_PI_IFACES      6        // max tracked active interfaces
+#define PI_IFACE_NAME_LEN 14        // "wlan0 SSIDNAM" + NUL
+#define IFACE_SCROLL_MS   3000UL    // ms between iface scroll steps
+
+struct PiIface {
+  char name[PI_IFACE_NAME_LEN];     // e.g. "eth0" or "wlan0 TOFTA"
+  char ip[16];                      // e.g. "192.168.1.5"
+};
+
 // -----------------------------------------------------------
 //  Touch gesture actions
 // -----------------------------------------------------------

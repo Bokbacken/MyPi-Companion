@@ -99,6 +99,40 @@ void processMsg(const String& msg) {
     return;
   }
 
+  // STATUS:IFACES:<name1>:<ip1>,<name2>:<ip2>,...  (or NONE)
+  if (msg.startsWith("STATUS:IFACES:")) {
+    String body = msg.substring(14);
+    piIfaceCount = 0;
+    if (body != "NONE") {
+      int start = 0;
+      while (start < (int)body.length() && piIfaceCount < MAX_PI_IFACES) {
+        int comma  = body.indexOf(',', start);
+        String tok = (comma < 0) ? body.substring(start)
+                                 : body.substring(start, comma);
+        tok.trim();
+        int col = tok.lastIndexOf(':');   // last colon separates name from IP
+        if (col > 0) {
+          String nm = tok.substring(0, col);
+          String ip = tok.substring(col + 1);
+          nm.trim(); ip.trim();
+          if (nm.length() > 0 && ip.length() > 0) {
+            strlcpy(piIfaces[piIfaceCount].name, nm.c_str(), PI_IFACE_NAME_LEN);
+            strlcpy(piIfaces[piIfaceCount].ip,   ip.c_str(), sizeof(piIfaces[0].ip));
+            piIfaceCount++;
+          }
+        }
+        if (comma < 0) break;
+        start = comma + 1;
+      }
+    }
+    // Keep the scroll position across 5 s polls so every interface gets shown
+    if (piIfaceIdx >= piIfaceCount) piIfaceIdx = 0;
+    lastStatusMs = millis();
+    if (!piConnected) piConnected = true;
+    if (currentState == STATE_STATUS) { drawStatusBar(); gfx->flush(); }
+    return;
+  }
+
   // PROFILES:<p1>,<p2>,...
   if (msg.startsWith("PROFILES:")) {
     parseProfiles(msg.substring(9));

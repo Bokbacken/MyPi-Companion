@@ -98,8 +98,14 @@ void drawStatusBar() {
     drawTxt("---", 4, y2, COL_DIM, COL_STATUS_BG);
   }
 
-  // ── Line 3: Pi status ────────────────────────────────────
-  if (piConnected) {
+  // ── Line 3: Pi status / active interface label ───────────
+  if (piConnected && piIfaceCount > 0) {
+    char nameBuf[18];
+    truncate(nameBuf, piIfaces[piIfaceIdx % piIfaceCount].name, 17);
+    char l3Buf[22];
+    snprintf(l3Buf, sizeof(l3Buf), "Pi: %s", nameBuf);
+    drawTxt(l3Buf, 4, y3, COL_ACTIVE, COL_STATUS_BG);
+  } else if (piConnected) {
     drawTxt("Pi: ", 4, y3, COL_DIM, COL_STATUS_BG);
     char ssBuf[22];
     truncate(ssBuf, activeSSID, 21);
@@ -117,6 +123,10 @@ void drawStatusBar() {
     char infoBuf[24];
     truncate(infoBuf, infoMsg, 23);
     drawTxt(infoBuf, 4, y4, COL_ACCENT, COL_STATUS_BG);
+  } else if (piConnected && piIfaceCount > 0) {
+    char ipBuf[24];
+    truncate(ipBuf, piIfaces[piIfaceIdx % piIfaceCount].ip, 23);
+    drawTxt(ipBuf, 4, y4, COL_DIM, COL_STATUS_BG);
   } else if (piConnected) {
     char ipBuf[24];
     truncate(ipBuf, activeIP, 23);
