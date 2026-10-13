@@ -344,6 +344,7 @@ void setup() {
   //
   //  Step 1: Kick off async Wi-Fi scan immediately (non-blocking).
   //          The scan runs in the background while logos are shown.
+  wifiDiagInit();          // count STA drops for /api/apstatus
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
   WiFi.scanNetworks(true /*async*/, true /*show_hidden*/);
@@ -393,7 +394,28 @@ void setup() {
 // ============================================================
 //  LOOP
 // ============================================================
+// Longest loop() pass, in two 10 s windows (current + previous), so
+// /api/apstatus can show whether our own code is stalling. NAT itself
+// runs in the lwIP task on core 0 and does not depend on loop().
+uint32_t loopMaxUs     = 0;
+uint32_t loopMaxPrevUs = 0;
+
+static void _loopBody();
+
 void loop() {
+  static uint32_t windowStart = 0;
+  uint32_t t0 = micros();
+  _loopBody();
+  uint32_t dt = micros() - t0;
+  if (dt > loopMaxUs) loopMaxUs = dt;
+  if (millis() - windowStart >= 10000UL) {
+    windowStart   = millis();
+    loopMaxPrevUs = loopMaxUs;
+    loopMaxUs     = 0;
+  }
+}
+
+static void _loopBody() {
   handleTouch();
   handleSerial();
   mscLoop();   // host-initiated MSC eject (SCSI START STOP UNIT)

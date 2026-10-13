@@ -29,6 +29,27 @@
 // concatenated first, so all .ino files can see them).
 
 // -----------------------------------------------------------
+//  STA link diagnostics (shown on /ap-profiles via /api/apstatus)
+//  Written from the Arduino event task, read from loop().
+//  No Serial output here: Serial is the Pi protocol channel and
+//  printing from another task could interleave protocol lines.
+// -----------------------------------------------------------
+volatile uint32_t staDropCount   = 0;   // STA disconnects since boot
+volatile uint8_t  staLastReason  = 0;   // wifi_err_reason_t of last drop
+volatile uint32_t staLastDropMs  = 0;   // millis() of last drop
+
+static void _onStaDisconnected(arduino_event_id_t, arduino_event_info_t info) {
+  staDropCount++;
+  staLastReason = info.wifi_sta_disconnected.reason;
+  staLastDropMs = millis();
+}
+
+// Call once in setup(), before the first WiFi.mode().
+void wifiDiagInit() {
+  WiFi.onEvent(_onStaDisconnected, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+}
+
+// -----------------------------------------------------------
 //  Internal helpers
 // -----------------------------------------------------------
 
