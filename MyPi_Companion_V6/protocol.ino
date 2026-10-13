@@ -115,6 +115,10 @@ void processMsg(const String& msg) {
           String nm = tok.substring(0, col);
           String ip = tok.substring(col + 1);
           nm.trim(); ip.trim();
+          // Interface names never contain spaces; older daemons appended
+          // the SSID ("wlan0 Ibis Style") — keep only the real name.
+          int sp = nm.indexOf(' ');
+          if (sp > 0) nm = nm.substring(0, sp);
           if (nm.length() > 0 && ip.length() > 0) {
             strlcpy(piIfaces[piIfaceCount].name, nm.c_str(), PI_IFACE_NAME_LEN);
             strlcpy(piIfaces[piIfaceCount].ip,   ip.c_str(), sizeof(piIfaces[0].ip));
