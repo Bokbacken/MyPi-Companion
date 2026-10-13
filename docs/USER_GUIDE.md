@@ -202,7 +202,7 @@ Home (status)
         ├── Install CLI-Pi     → Keyboard (username) → Keyboard (password) → install
         ├── Install GUI-Pi     → confirm prompt → install
         ├── Flip display
-        ├── Boot AP: <profile> → cycles none / profile / profile+Hide
+        ├── Boot AP: <profile> → Boot AP picker (None / profile 1–4)
         └── Back
 ```
 
@@ -249,26 +249,31 @@ so you can enter the password. **OK** saves the network to a slot and connects.
 | **Install CLI-Pi** | Asks for the Pi username and password on the keyboard, then runs the CLI/headless installer (see [section 10](#10-install-on-pi)) |
 | **Install GUI-Pi** | Shows a confirm prompt, then runs the Desktop installer (see [section 10](#10-install-on-pi)) |
 | **Flip display** | Rotates the screen 180° |
-| **Boot AP** | Chooses which AP profile starts automatically at power-on, and whether its page is hidden. Each select steps to the next state (see below); saved per profile in NVS |
+| **Boot AP** | Opens a list where you choose which AP profile starts automatically at power-on, or **None** (see below); saved per profile in NVS |
 | **Back** | Back to the main menu |
 
-#### Boot AP cycle
+#### Boot AP picker
 
-Each time you select **Boot AP**, it steps through 9 states and then wraps around:
+The **Boot AP** item shows the current choice, for example `Boot AP: none`,
+`Boot AP:<name>`, or `Boot:<name>+Hide` when that profile also has **Hide on boot** set.
+The label is green while a boot profile is set and dim when it is `none`. Long profile
+names are shortened to fit.
 
-| # | Label | Meaning |
-|---|---|---|
-| 1 | `Boot AP: none` | No AP starts at boot |
-| 2 | `Boot AP:<name>` | Profile 0 starts at boot, AP page shown |
-| 3 | `Boot:<name>+Hide` | Profile 0 starts at boot, AP page hidden |
-| 4–5 | | Profile 1, shown / hidden |
-| 6–7 | | Profile 2, shown / hidden |
-| 8–9 | | Profile 3, shown / hidden |
+Selecting it opens the **Boot AP** list:
 
-After profile 3 + Hide the cycle goes back to `none`. The label is green while a boot
-profile is set and dim when it is `none`. Long profile names are shortened to fit.
+| Item | Meaning |
+|---|---|
+| `None` | No AP starts at boot |
+| `1: <name>` … `4: <name>` | That profile starts at boot |
+
+The current choice is shown in green, and the cursor starts on it. Swipe up/down (or tap
+NEXT) to move, and tap **SELECT** or swipe right to save and return to Advanced. Swipe
+left to go back without changing anything.
+
+Only one profile can start on boot; choosing a profile clears the flag on the others.
+**Hide on boot** is not changed from this list; set it per profile on `/ap-profiles`.
 The choice is stored in the AP profiles themselves (NVS), so it is the same setting as
-the **Start on boot** / **Hide on boot** checkboxes on `/ap-profiles`.
+the **Start on boot** checkbox on `/ap-profiles`.
 
 ### AP active
 
@@ -324,14 +329,18 @@ screen.
 
 ### Range tabs
 
-| Tab | Characters |
+| Tab | Contents |
 |---|---|
-| `az` | `abcdefghijklmnopqrstuvwxyz` |
-| `AZ` | `ABCDEFGHIJKLMNOPQRSTUVWXYZ` |
-| `09` | `0123456789` |
-| `S1` | ``!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~`` |
-| `S2` | `()[]{}<>\|~` and **space** |
-| `In` | `å ä ö Å Ä Ö é è ê ë à â ç ü û ù ú î ï ô` |
+| `az` | a–z (26) |
+| `AZ` | A–Z (26) |
+| `09` | SPC (space), 0–9 (11) |
+| `S1` | `! # @ $ % & * - _ + = . , ? : ; /` (17) |
+| `S2` | `` " ' ( ) [ ] \ { } ^ ~ \| < > ` `` (15) |
+| `In` | `å ä ö Å Ä Ö é è ê ë à â ç ü û ù ú î ï ô` (20) |
+
+**Space** is the first entry of the `09` tab and is shown as `SPC` on the wheel. `S1`
+holds the symbols most used in passwords, and `S2` the brackets and rarer symbols. Every
+printable ASCII symbol is in exactly one tab, so none appears twice.
 
 Since v6.2 the `In` tab shows all its characters correctly on the display: the wheel,
 the password field and the tab itself show `å ä ö Å Ä Ö é è ê ë à â ç ü û ù ú î ï ô` as
@@ -370,7 +379,7 @@ Open one of these:
 | `/terminal` | xterm.js terminal on the Pi's bash. Each browser tab gets its own session (up to 4); command history is shared between tabs (Ctrl+Up/Down) |
 | `/macros` | Manage terminal macros and quick-action buttons |
 | `/storage` | File manager for internal flash and the SD card |
-| `/ap-profiles` | Edit the 4 AP profiles (name, SSID, password, subnet, NAT, start on boot, hide on boot) |
+| `/ap-profiles` | Edit the 4 AP profiles (name, SSID, password, subnet, NAT, start on boot, hide on boot). The status table lists each connected AP client with the last IP octet (e.g. `.2`), the manufacturer when known (Raspberry Pi, Apple, …) or the end of its MAC, and the full MAC |
 | `/update` | OTA firmware update |
 
 ### API endpoints (for scripts)

@@ -797,6 +797,24 @@ void drawApSelectContent() {
   drawMenuList(items, MAX_AP_PROFILES + 1, apSelectIndex, 0);
 }
 
+// ============================================================
+//  AP BOOT PROFILE SELECTOR  (None + 4 profiles)
+// ============================================================
+void drawApBootSelectContent() {
+  // Items: 0 = None, 1..MAX_AP_PROFILES = profile slot i-1
+  const int total = MAX_AP_PROFILES + 1;
+  MenuItem items[MAX_AP_PROFILES + 1];
+  static char labels[MAX_AP_PROFILES][28];
+  int bootSlot = apBootSlot();   // -1 if none
+
+  items[0] = { "None", (bootSlot < 0) ? COL_ACTIVE : COL_DIM };
+  for (int i = 0; i < MAX_AP_PROFILES; i++) {
+    snprintf(labels[i], sizeof(labels[i]), "%d: %s", i + 1, apProfiles[i].name);
+    items[i + 1] = { labels[i], (bootSlot == i) ? COL_ACTIVE : COL_TEXT };
+  }
+  drawMenuList(items, total, apBootSelectIdx, 0);
+}
+
 
 // ============================================================
 //  ADVANCED INFO  (system diagnostics)
@@ -875,7 +893,7 @@ void drawAdvInfoContent() {
 // ============================================================
 
 // OUI (first 3 MAC bytes) → manufacturer, or nullptr if unknown
-static const char* _ouiLookup(const uint8_t *mac) {
+const char* _ouiLookup(const uint8_t *mac) {   // also used by web_server.ino
   uint32_t oui = ((uint32_t)mac[0] << 16) | ((uint32_t)mac[1] << 8) | mac[2];
   // Raspberry Pi Foundation / Trading
   if (oui == 0xB827EB || oui == 0xDCA632 || oui == 0xE45F01 ||

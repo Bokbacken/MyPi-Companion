@@ -59,6 +59,10 @@
 #include "ap_profiles_html.h" // AP_PROFILES_HTML — AP profile editor at /ap-profiles
 #include "logo_web.h"     // LOGO_WEB_PNG — MyPi Companion logo at /logo.png
 #include <esp_wifi.h>     // channel / power-save / bandwidth diagnostics
+#include <esp_wifi_ap_get_sta_list.h>   // esp_wifi_ap_get_sta_list_with_ip() for /api/apstatus
+
+// Forward declaration (defined in display.ino)
+const char* _ouiLookup(const uint8_t *mac);
 
 // NAPT (internet sharing) state — see apNatService()
 static bool      _natActive  = false;  // NAPT currently enabled on the AP netif
@@ -1101,6 +1105,36 @@ void handleApiApStatus() {
   j += ",\"profile\":"   + String(activeApProfile + 1);
   j += ",\"apIp\":\""    + WiFi.softAPIP().toString() + "\"";
   j += ",\"clients\":"   + String((int)WiFi.softAPgetStationNum());
+  // Per-client list: MAC from the Wi-Fi driver, IP from the DHCP server
+  j += ",\"clientList\":[";
+  if (apRunning) {
+    static wifi_sta_list_t        wsl;   // static: keep ~0.5 KB off the stack
+    static wifi_sta_mac_ip_list_t ipl;
+    memset(&wsl, 0, sizeof(wsl));
+    memset(&ipl, 0, sizeof(ipl));
+    bool haveIp = false;
+    if (esp_wifi_ap_get_sta_list(&wsl) == ESP_OK)
+      haveIp = (esp_wifi_ap_get_sta_list_with_ip(&wsl, &ipl) == ESP_OK);
+    for (int ci = 0; ci < wsl.num; ci++) {
+      const uint8_t *mac = wsl.sta[ci].mac;
+      char ipStr[16] = "";
+      int  lastOctet = -1;
+      if (haveIp && ipl.sta[ci].ip.addr != 0) {
+        snprintf(ipStr, sizeof(ipStr), IPSTR, IP2STR(&ipl.sta[ci].ip));
+        lastOctet = (int)esp_ip4_addr4(&ipl.sta[ci].ip);
+      }
+      const char *oui = _ouiLookup(mac);
+      char macSuffix[10];
+      snprintf(macSuffix, sizeof(macSuffix), "%02x:%02x:%02x", mac[3], mac[4], mac[5]);
+      char entry[128];
+      snprintf(entry, sizeof(entry),
+               "%s{\"ip\":\"%s\",\"dot\":%d,\"label\":\"%s\",\"mac\":\"%02x:%02x:%02x:%02x:%02x:%02x\"}",
+               ci ? "," : "", ipStr, lastOctet, oui ? oui : macSuffix,
+               mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+      j += entry;
+    }
+  }
+  j += "]";
   j += ",\"natWanted\":" + String(_natWanted ? "true" : "false");
   j += ",\"natActive\":" + String(_natActive ? "true" : "false");
   j += ",\"natStatus\":\"" + String(_natStatus) + "\"";

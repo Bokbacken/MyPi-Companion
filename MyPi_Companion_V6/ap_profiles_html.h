@@ -179,6 +179,12 @@ async function loadStatus(test) {
         : '<span class="ok">0</span>'],
       ['ESP load', `loop max ${d.loopMaxMs} ms · heap ${d.heapFreeKb} kB (min ${d.heapMinKb} kB) · up ${Math.floor(d.uptimeS / 60)} min`],
     ];
+    // Connected AP clients, right after the AP row
+    if (d.apActive && d.clientList && d.clientList.length > 0) {
+      const cl = d.clientList.map((c, i) =>
+        [`&nbsp;&nbsp;Client ${i + 1}`, `${c.dot >= 0 ? '.' + c.dot : '?.?'}&nbsp;&nbsp;${esc(c.label)} <span style="color:#8b949e">${esc(c.mac)}</span>`]);
+      rows.splice(1, 0, ...cl);
+    }
     if (d.dnsTest !== undefined)
       rows.push(['ESP DNS test', `<span class="${cls(d.dnsTest !== 'FAIL')}">google.com → ${esc(d.dnsTest)}</span>`]);
     else if (test)

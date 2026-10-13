@@ -222,5 +222,6 @@ enum State {
   STATE_ADVANCED,     // AP / info / Install on Pi
   STATE_ADV_INFO,     // system diagnostics
   STATE_AP_ACTIVE,    // AP mode running
-  STATE_AP_SELECT     // AP profile selection menu (pick 0-3 before starting)
+  STATE_AP_SELECT,    // AP profile selection menu (pick 0-3 before starting)
+  STATE_AP_BOOT_SELECT // pick which AP profile to auto-start on boot
 };

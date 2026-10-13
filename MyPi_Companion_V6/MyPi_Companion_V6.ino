@@ -83,6 +83,7 @@ ApProfile   apProfiles[MAX_AP_PROFILES];
 int         activeApProfile = 0;    // last started AP slot
 bool        apRunning       = false; // true while softAP is up, regardless of display state
 int         apSelectIndex   = 0;    // cursor in STATE_AP_SELECT menu
+int         apBootSelectIdx = 0;    // cursor in boot-select list (0=None, 1-4=slot 0-3)
 // Runtime AP network settings (populated by startAP(slot))
 IPAddress   dynApIp, dynApGw, dynApSn;
 
@@ -166,9 +167,9 @@ int8_t  piLayoutForce = -1;
 const char * const KB_RANGES[KB_RANGE_COUNT] = {
   "abcdefghijklmnopqrstuvwxyz",
   "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-  "0123456789",
-  "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~",
-  "()[]{}<>|~ ",
+  " 0123456789",                 // 09: space first, then digits
+  "!#@$%&*-_+=.,?:;/",           // S1: common password symbols
+  "\"'()[]\\{}^~|<>`",             // S2: structural / rare symbols (no overlap with S1)
   "\xe5\xe4\xf6\xc5\xc4\xd6\xe9\xe8\xea\xeb\xe0\xe2\xe7\xfc\xfb\xf9\xfa\xee\xef\xf4"
 };
 
