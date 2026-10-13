@@ -147,27 +147,36 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 var polling=true,curSsid='',curConn='';
 function showMsg(t,e){var m=document.getElementById('msg');m.textContent=t;m.className='msg'+(e?' err':'');m.style.display='block';}
 function hideMsg(){document.getElementById('msg').style.display='none';}
-function buildList(profiles){
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return '&#'+c.charCodeAt(0)+';';});}
+// names = NM connection names. Netplan-generated ones ("netplan-wlan0-TOFTA")
+// are shown without the prefix but connected by their full name.
+function buildList(names,piOk){
   var h='';
-  profiles.forEach(function(p){
-    var active=(p.ssid===curConn);  // p.ssid is the NM connection name; compare with curConn
-    h+='<div class="row"><span><span class="dot '+(active?'on':'off')+'"></span><span class="name">'+p.ssid+'</span></span>';
+  names.forEach(function(n,i){
+    var active=(n===curConn);
+    var label=n.replace(/^netplan-[^-]+-/,'');
+    h+='<div class="row"><span><span class="dot '+(active?'on':'off')+'"></span><span class="name">'+esc(label)+'</span></span>';
     if(active)h+='<button class="btn ba">Active</button>';
-    else h+='<button class="btn bc" onclick="conn(\''+p.ssid+'\')">Connect</button>';
+    else h+='<button class="btn bc" onclick="conn(PN['+i+'])">Connect</button>';
     h+='</div>';
   });
-  if(!h)h='<p style="color:#8b949e">No profiles — Pi not connected</p>';
+  window.PN=names;
+  if(!h)h='<p style="color:#8b949e">'+(piOk?'No Wi-Fi profiles on the Pi (loading…)':'No profiles — Pi not connected')+'</p>';
   document.getElementById('plist').innerHTML=h;
 }
 function poll(){
   if(!polling)return;
+  var piOk=false;
   fetch('/status').then(r=>r.json()).then(function(d){
     curSsid=d.ssid||'';
     curConn=d.conn||'';
+    piOk=!!d.pi;
     document.getElementById('cur-ssid').textContent=d.ssid||'---';
     document.getElementById('cur-ip').textContent=d.ip||'---';
-    return fetch('/api/piprofiles');
-  }).then(r=>r.json()).then(buildList).catch(function(){});
+    return fetch('/api/piconns');   // NM connection names, as used by CMD:CONNECT
+  }).then(r=>r.json()).then(function(names){
+    buildList(names, piOk);
+  }).catch(function(){});
   setTimeout(poll,3000);
 }
 function conn(p){

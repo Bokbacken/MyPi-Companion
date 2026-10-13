@@ -286,6 +286,32 @@ void handleApiPiProfiles() {
   server.send(200, "application/json", json);
 }
 
+// GET /api/piconns — NetworkManager connection names (from PROFILES:, sent by
+// the daemon after HELLO and after ADDWIFI). These are what CMD:CONNECT needs
+// and what STATUS:CONN reports; on newer Pi OS they look like
+// "netplan-wlan0-<SSID>", which is not the SSID from /api/piprofiles.
+void handleApiPiConns() {
+  // Empty list while the Pi is connected = we missed PROFILES:. Re-send HELLO
+  // (daemon answers with ACK + PROFILES + STATUS), at most every 10 s.
+  static unsigned long lastAsk = 0;
+  if (numDynProfiles == 0 && piConnected && millis() - lastAsk > 10000UL) {
+    lastAsk = millis();
+    Serial.println("HELLO");
+  }
+  String json = "[";
+  for (int i = 0; i < numDynProfiles; i++) {
+    if (i > 0) json += ",";
+    json += "\"";
+    for (const char *c = dynProfiles[i]; *c; c++) {
+      if (*c == '"' || *c == '\\') json += '\\';
+      json += *c;
+    }
+    json += "\"";
+  }
+  json += "]";
+  server.send(200, "application/json", json);
+}
+
 void handleApiReqPiProfiles() {
   piProfilesFresh = false;
   Serial.println("CMD:GET_PROFILES_FULL");
@@ -737,6 +763,7 @@ void startWebServer() {
   server.on("/profiles",          handleProfiles);
   server.on("/api/nvs",           handleApiNvs);
   server.on("/api/piprofiles",    handleApiPiProfiles);
+  server.on("/api/piconns",       handleApiPiConns);
   server.on("/api/reqpiprofiles", HTTP_POST, handleApiReqPiProfiles);
   server.on("/api/nvssave",       HTTP_POST, handleApiNvsSave);
   server.on("/api/nvsdel",        HTTP_POST, handleApiNvsDel);
