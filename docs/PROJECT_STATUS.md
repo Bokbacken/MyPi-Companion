@@ -1,11 +1,11 @@
 # MyPi-Companion — Project Status
 
-_Last updated: 2026-10-13 — current firmware: **v6.1 (released)**, release tag `v6.1`_
+_Last updated: 2026-10-14 — current firmware: **v6.2 (released)**, release tag `v6.2`_
 
 > End-user documentation: [USER_GUIDE.md](USER_GUIDE.md).
 
 > **Release tags:** `v4` (commit `a282ba8`), `v5`, `v6.0-hms-final` (commit `20dbba4`,
-> last state before the MyPi rebrand), `v6.1` (commit `c2cbb31`, current release).
+> last state before the MyPi rebrand), `v6.1` (commit `c2cbb31`), `v6.2` (commit `7d014e6`, current release).
 > All new work happens in `MyPi_Companion_V6/` on feature branches; never push to `main`.
 
 ---
@@ -107,15 +107,19 @@ tap = confirm character / OK.
 ## State machine (`config.h`)
 
 ```
-STATE_STATUS     — home screen: Pi SSID/IP + ESP SSID/IP
-STATE_MENU       — main menu
-STATE_PI_MENU    — Wi-Fi profiles from the Pi (+ Back)
-STATE_NVS_MENU   — local NVS profiles (10 slots + Back)
-STATE_ADVANCED   — Advanced submenu
-STATE_ADV_INFO   — system info (uptime, heap, Pi status, USB port, sketch)
-STATE_AP_ACTIVE  — AP running: SSID/password/IP/clients
-STATE_KB         — character picker for passwords
-STATE_SCAN       — Wi-Fi scan results
+STATE_STATUS         — home screen: Pi SSID/IP + ESP SSID/IP
+STATE_MENU           — main menu
+STATE_PI_MENU        — Wi-Fi profiles from the Pi (+ Back)
+STATE_NVS_MENU       — shared NVS slots — push profile to Pi
+STATE_ESP_MENU       — shared NVS slots — connect ESP
+STATE_ESP_SCAN       — ESP radio scan results (2.4 GHz)
+STATE_PI_SCAN        — Pi nmcli scan results (2.4 + 5 GHz)
+STATE_ESP_KB         — character picker (Wi-Fi password, CLI install user/password)
+STATE_ADVANCED       — Advanced submenu (7 items)
+STATE_ADV_INFO       — system info (uptime, heap, Pi status, USB port, firmware)
+STATE_AP_ACTIVE      — AP running: SSID/password/IP/clients
+STATE_AP_SELECT      — pick AP profile (1-4) before starting
+STATE_AP_BOOT_SELECT — v6.2: pick which AP profile auto-starts on boot (or None)
 ```
 
 ---
@@ -366,6 +370,32 @@ commit both. The script asserts: no FitAddon, `termFit` present, vertical QB pre
       unreachable through NAPT). Throughput ~6/3–4 Mbit/s (software NAPT on the ESP32;
       fine for SSH/terminal/web) vs 112/120 Mbit/s directly on the hotel Wi-Fi.
 
+## v6.2 — released 2026-10-14
+
+Tagged `v6.2` at `7d014e6` (merge of PR #20; docs PR #19 merged just before).
+**All items below are hardware-verified** (touch UI and web). Build: ~55 % of the 3 MB
+app partition. `FW_VERSION "6.2"`; version and build date shown on the Info screen and web.
+
+### What is new in v6.2 compared with v6.1
+
+| Area | Change |
+|---|---|
+| International keyboard | `In` tab shows real glyphs (Latin-1 → CP437 map); `kbOk()` converts Latin-1 → UTF-8 before saving/sending |
+| Keyboard tabs | No duplicates: `09` = SPC + digits, `S1` = 18 password symbols `!#@$%&*-_+=.,?:;/`, `S2` = 15 structural ``"'()[]\{}^~\|<>` `` |
+| Install on Pi (touch) | Advanced menu split into **Install CLI-Pi** (keyboard: username → password → run; password RAM-only) and **Install GUI-Pi** (confirm overlay → run) |
+| AP hide/show | Tap the header to hide/show the AP screen; Wi-Fi arc icon in the header while the AP runs hidden; NAT `+` in `COL_ACCENT` |
+| AP on boot | Per-profile `onBoot` (exclusive) and `hideOnBoot` flags (NVS `apcfg` `a{i}boot` / `a{i}hide`, `apBootSlot()`); touch **Boot AP** opens a list (None + 4 profiles, current choice green); web AP editor has *Start on boot* / *Hide on boot* checkboxes, exclusion enforced server-side |
+| AP clients | Touch and web list each client as `.N` + manufacturer (OUI) or last 3 MAC bytes; `/api/apstatus` returns `clientList[]` (`ip`, `dot`, `label`, `mac`) |
+| Web AP editor | Eye button to reveal the AP password |
+| Docs | `USER_GUIDE.md` updated for all of the above |
+
+### Pending (next release)
+
+- [ ] **Desktop install regression on a re-imaged Lite card**: re-test and fix Desktop mode
+      on a card that was re-imaged from Raspberry Pi OS Lite.
+- [ ] Touch Pi Networks menu shows the `netplan-wlan0-` prefix (web strips it) — cosmetic.
+- [ ] Keyboard password masking (asterisks) — deferred until the input method has been evaluated.
+
 ## v6.1 — released 2026-10-13
 
 Tagged `v6.1` at `c2cbb31` (merge of PR #18). **All items below are hardware-verified.**
@@ -388,12 +418,12 @@ Build: ~54 % of the 3 MB app partition (core 3.3.12, GFX 1.6.9, WebSockets 2.7.2
 v6.0 features (multi-session terminal, AP profiles, NAT, CLI install mode, install
 settings in NVS) are listed in the v6 status section above and are carried over unchanged.
 
-### Pending (next release)
+### Pending at v6.1 release (resolved in v6.2 except the Desktop regression)
 
-- [ ] **International keyboard tab (`In`)**: characters are displayed as 2-digit hex codes
+- [x] **International keyboard tab (`In`)**: characters are displayed as 2-digit hex codes
       (e.g. `E5` for `å`) instead of glyphs. Insertion into the password buffer is correct;
       only rendering needs fixing (CP437 glyphs 0xE5..0xF4).
-- [ ] **Install on Pi from the touch menu**: CLI mode currently shows "Start from web" when
+- [x] **Install on Pi from the touch menu**: CLI mode currently shows "Start from web" when
       no credentials are loaded (password is RAM-only by design); decide on a touch flow.
 - [ ] **Desktop install regression on a re-imaged Lite card**: re-test and fix Desktop mode
       on a card that was re-imaged from Raspberry Pi OS Lite.
