@@ -12,6 +12,9 @@
 //      x < SCREEN_W*2/3      → ACT_TAP_MID
 //      x >= SCREEN_W*2/3     → ACT_TAP_RIGHT
 //      (max displacement: TAP_MAX_PX = 14)
+//    Tap in the header bar (y < HDR_H) → ACT_TAP_HEADER:
+//      while the AP runs, toggles STATE_AP_ACTIVE <-> STATE_STATUS
+//      (hidden AP shown as an icon in the header; ignored on keyboard)
 //
 //  STATE_ESP_KB dispatch:
 //    SWIPE_LEFT  → kbRangePrev()    (previous range tab)
@@ -84,6 +87,11 @@ static TouchAction _classifyGesture() {
     if (_gStartX < w3)       return ACT_TAP_LEFT;
     if (_gStartX < w3 * 2)   return ACT_TAP_MID;
     return ACT_TAP_RIGHT;
+  }
+
+  // ── Header tap (y < HDR_H) ──────────────────────────────────
+  if (absDx <= TAP_MAX_PX && absDy <= TAP_MAX_PX && _gStartY < HDR_H) {
+    return ACT_TAP_HEADER;
   }
 
   return ACT_NONE;
@@ -667,10 +675,18 @@ void doSelect() {
         gfx->fillScreen(COL_BG);
         updateContentArea();
       } else if (advMenuIndex == 5) {
-        // ── AP on boot toggle (persisted in NVS) ───────────────
-        apOnBoot = !apOnBoot;
+        // ── AP on boot: cycle OFF → ON → ON+HIDE → OFF (NVS) ──
+        if (!apOnBoot) {
+          apOnBoot = true;  apHideOnBoot = false;
+        } else if (!apHideOnBoot) {
+          apHideOnBoot = true;
+        } else {
+          apOnBoot = false; apHideOnBoot = false;
+        }
         { Preferences _p; _p.begin("rigcfg", false);
-          _p.putBool(NVS_KEY_AP_BOOT, apOnBoot); _p.end(); }
+          _p.putBool(NVS_KEY_AP_BOOT, apOnBoot);
+          _p.putBool("apHideBoot", apHideOnBoot);
+          _p.end(); }
         updateContentArea();
       } else {
         goBack();
@@ -703,6 +719,21 @@ void doSelect() {
 //  ACTION DISPATCHER
 // ============================================================
 void dispatchAction(TouchAction act) {
+
+  // ── Header tap: hide / show the AP page while the AP runs ────
+  if (act == ACT_TAP_HEADER) {
+    if (!apRunning) return;   // no AP — header tap does nothing
+    // Ignored on the keyboard so no half-typed credentials are left behind
+    if (currentState == STATE_ESP_KB) return;
+    advGuiConfirmPending = false;
+    if (currentState == STATE_AP_ACTIVE) {
+      currentState = STATE_STATUS;      // hide: header shows AP icon
+    } else {
+      currentState = STATE_AP_ACTIVE;   // un-hide: back to AP page
+    }
+    updateContentArea();
+    return;
+  }
 
   // ── GUI install confirmation overlay ─────────────────────────
   if (advGuiConfirmPending) {

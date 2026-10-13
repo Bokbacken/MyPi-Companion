@@ -130,7 +130,7 @@ void handleStatus() {
   json += "\",\"espip\":\"";
   json += espIP;
   json += "\",\"ap\":";
-  json += (currentState == STATE_AP_ACTIVE) ? "true" : "false";
+  json += apRunning ? "true" : "false";
   json += "}";
   server.send(200, "application/json", json);
 }
@@ -150,6 +150,16 @@ void handleApiInfo() {
   json += ",\"esp_connected\":"; json += espConnected ? "true" : "false";
   json += ",\"esp_ssid\":\"";  json += espSSID;    json += "\"";
   json += ",\"esp_ip\":\"";    json += espIP;      json += "\"";
+  // Firmware version + build date (__DATE__ "Oct 13 2026" -> "13 Oct 2026")
+  char dateBuf[16];
+  char mon_[4]; int day_; char year_[5];
+  if (sscanf(__DATE__, "%3s %d %4s", mon_, &day_, year_) == 3) {
+    snprintf(dateBuf, sizeof(dateBuf), "%d %s %s", day_, mon_, year_);
+  } else {
+    strlcpy(dateBuf, __DATE__, sizeof(dateBuf));
+  }
+  json += ",\"fw_version\":\"" FW_VERSION "\"";
+  json += ",\"fw_date\":\""; json += dateBuf; json += "\"";
   json += "}";
   server.send(200, "application/json", json);
 }
@@ -895,7 +905,7 @@ void handleApiGetApProfiles() {
     json += ",\"subnetLabel\":\"" + String(AP_SUBNET_LABELS[apProfiles[i].subnet]) + "\"";
     json += ",\"nat\":"    + String(apProfiles[i].nat ? "true" : "false");
     json += ",\"valid\":"  + String(apProfiles[i].valid ? "true" : "false");
-    json += ",\"active\":" + String((currentState == STATE_AP_ACTIVE && activeApProfile == i) ? "true" : "false");
+    json += ",\"active\":" + String((apRunning && activeApProfile == i) ? "true" : "false");
     json += "}";
   }
   json += "]";
@@ -967,7 +977,7 @@ static bool _apSetNapt(bool enable) {
 static void _apNatUpdate();
 void apNatService() {
   static unsigned long lastCheck = 0;
-  if (currentState != STATE_AP_ACTIVE && !_natActive) return;
+  if (!apRunning && !_natActive) return;
   if (millis() - lastCheck < 2000) return;
   lastCheck = millis();
   char prev[sizeof(_natStatus)];
@@ -1041,6 +1051,7 @@ void startAP(int profileSlot) {
 
   startWebServer();
   Serial.println("CMD:START_AP");
+  apRunning = true;
 }
 
 void stopAP() {
@@ -1060,6 +1071,7 @@ void stopAP() {
     WiFi.mode(WIFI_OFF);
   }
   Serial.println("CMD:STOP_AP");
+  apRunning = false;
 }
 
 // GET /api/apstatus — AP / NAT / uplink diagnostics (for troubleshooting NAT)
@@ -1071,7 +1083,7 @@ void handleApiApStatus() {
     dnsTest = WiFi.hostByName("google.com", r) == 1 ? r.toString() : String("FAIL");
   }
   String j = "{";
-  j += "\"apActive\":"   + String(currentState == STATE_AP_ACTIVE ? "true" : "false");
+  j += "\"apActive\":"   + String(apRunning ? "true" : "false");
   j += ",\"profile\":"   + String(activeApProfile + 1);
   j += ",\"apIp\":\""    + WiFi.softAPIP().toString() + "\"";
   j += ",\"clients\":"   + String((int)WiFi.softAPgetStationNum());

@@ -72,6 +72,22 @@ void drawHeader(const char *title) {
   int cx = SCREEN_W - LOGO_ICON_W - 10;   // 10 px margin for rounded corners
   int cy = (HDR_H - LOGO_ICON_H) / 2;
   drawProgmemImage(cx, cy, LOGO_ICON_W, LOGO_ICON_H, logo_icon);
+
+  // AP running indicator (shown when AP is active but not on the AP page).
+  // Placed between the title (longest ends at x≈106) and the logo (x=139)
+  // instead of centred, so it never overlaps the title text.
+  if (apRunning && currentState != STATE_AP_ACTIVE) {
+    int ax = 118;
+    int ay = HDR_H / 2 + 4;   // arcs open upwards from this dot
+    // Arduino_GFX angles: 0° = 3 o'clock, clockwise → 210..330 = upper arc
+    gfx->fillCircle(ax, ay, 2, COL_ACCENT);                 // dot
+    gfx->fillArc(ax, ay, 6,  5, 210, 330, COL_ACCENT);      // inner arc
+    gfx->fillArc(ax, ay, 10, 9, 210, 330, COL_ACCENT);      // outer arc
+    // If NAT is active, add a small '+' to the right of the icon
+    if (apNatActive()) {
+      drawTxt("+", ax + 11, HDR_H / 2 - 4, COL_ACTIVE, COL_HDR_BG);
+    }
+  }
 }
 
 
@@ -742,14 +758,27 @@ void drawAdvancedMenuContent() {
     return;
   }
 
+  // AP on boot: cycle OFF → ON → ON+HIDE
+  const char *apBootLabel;
+  uint16_t    apBootColor;
+  if (!apOnBoot) {
+    apBootLabel = "AP on boot  [OFF]";
+    apBootColor = COL_DIM;
+  } else if (!apHideOnBoot) {
+    apBootLabel = "AP on boot  [ON]";
+    apBootColor = COL_ACTIVE;
+  } else {
+    apBootLabel = "AP on boot [ON+HIDE]";
+    apBootColor = COL_ACCENT;
+  }
+
   const MenuItem items[ADV_MENU_COUNT] = {
     { "Start AP",         COL_TEXT },
     { "Show info",        COL_TEXT },
     { "Install CLI-Pi",   COL_TEXT },
     { "Install GUI-Pi",   COL_TEXT },
     { "Flip display",     COL_TEXT },
-    { apOnBoot ? "AP on boot  [ON]" : "AP on boot  [OFF]",
-      apOnBoot ? COL_ACTIVE : COL_DIM },
+    { apBootLabel,        apBootColor },
     { "<- Back",          COL_DIM  },
   };
   drawMenuList(items, ADV_MENU_COUNT, advMenuIndex, 0);
@@ -774,6 +803,17 @@ void drawApSelectContent() {
 // ============================================================
 //  ADVANCED INFO  (system diagnostics)
 // ============================================================
+// Reformat compiler __DATE__ "Oct 13 2026" → "13 Oct 2026"
+static void _fmtBuildDate(char *buf, int bufLen) {
+  // __DATE__ is "MMM DD YYYY" — day may be space-padded
+  char mon[4]; int day; char year[5];
+  if (sscanf(__DATE__, "%3s %d %4s", mon, &day, year) == 3) {
+    snprintf(buf, bufLen, "%d %s %s", day, mon, year);
+  } else {
+    strlcpy(buf, __DATE__, bufLen);
+  }
+}
+
 void drawAdvInfoContent() {
   gfx->setTextSize(1);
 
@@ -795,6 +835,13 @@ void drawAdvInfoContent() {
   int y  = CONTENT_TOP + 4;
   int R  = 14;
   int kx = 4, vx = 68;
+
+  char dateBuf[16];
+  _fmtBuildDate(dateBuf, sizeof(dateBuf));
+  char verBuf[32];
+  snprintf(verBuf, sizeof(verBuf), "v%s  %s", FW_VERSION, dateBuf);
+  drawTxt("Version :", kx, y, COL_DIM, COL_BG);
+  drawTxt(verBuf,      vx, y, COL_ACCENT, COL_BG);  y += R;
 
   drawTxt("Uptime  :", kx, y, COL_DIM, COL_BG);
   drawTxt(uptimeBuf,   vx, y, COL_TEXT, COL_BG);  y += R;

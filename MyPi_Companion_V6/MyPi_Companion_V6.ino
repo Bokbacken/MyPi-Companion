@@ -82,6 +82,8 @@ Arduino_Canvas_PSRAM *gfx    = nullptr;
 ApProfile   apProfiles[MAX_AP_PROFILES];
 int         activeApProfile = 0;    // last started AP slot
 bool        apOnBoot        = false; // NVS: start AP automatically on boot
+bool        apRunning       = false; // true while softAP is up, regardless of display state
+bool        apHideOnBoot    = false; // NVS: hide AP page immediately after boot start
 int         apSelectIndex   = 0;    // cursor in STATE_AP_SELECT menu
 // Runtime AP network settings (populated by startAP(slot))
 IPAddress   dynApIp, dynApGw, dynApSn;
@@ -340,6 +342,7 @@ void setup() {
   { Preferences _p; _p.begin("rigcfg", true);
     displayFlipped = _p.getBool("flip", false);
     apOnBoot       = _p.getBool(NVS_KEY_AP_BOOT, false);
+    apHideOnBoot   = _p.getBool("apHideBoot", false);
     // Install target (password is never stored)
     piInstallMode = _p.getUChar("instMode", 0);
     piLayoutForce = _p.getChar("instLayout", -1);
@@ -387,8 +390,11 @@ void setup() {
   //  Nothing else starts the AP during setup(). Switch to the AP
   //  screen so loop() services the web server even without STA.
   if (apOnBoot && currentState != STATE_AP_ACTIVE) {
-    startAP(activeApProfile);
+    startAP(activeApProfile);   // sets apRunning
     currentState = STATE_AP_ACTIVE;
+    if (apHideOnBoot) {
+      currentState = STATE_STATUS;   // header shows AP icon (apRunning)
+    }
     updateContentArea();
   }
 
@@ -428,7 +434,7 @@ static void _loopBody() {
   mscLoop();   // host-initiated MSC eject (SCSI START STOP UNIT)
 
   // Web server: active in AP mode AND/OR when ESP is in STA mode
-  if (currentState == STATE_AP_ACTIVE || espConnected) {
+  if (apRunning || espConnected) {
     server.handleClient();
     wsServer.loop();
   }
@@ -448,7 +454,7 @@ static void _loopBody() {
   if (pendingApStart >= 0) {
     int slot = pendingApStart;
     pendingApStart = -1;
-    startAP(slot);
+    startAP(slot);              // sets apRunning
     currentState = STATE_AP_ACTIVE;
     updateContentArea();
   }

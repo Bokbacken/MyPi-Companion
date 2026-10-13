@@ -50,6 +50,10 @@ button.primary{background:#F47B20;border-color:#F47B20;color:#000}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#21262d;border:1px solid #30363d;padding:10px 16px;border-radius:6px;opacity:0;transition:opacity .2s;pointer-events:none}
 #toast.show{opacity:1}
 #toast.err{border-color:#f85149;color:#f85149}
+.pw-wrap{position:relative;display:flex;align-items:center}
+.pw-wrap input{flex:1;padding-right:34px}
+button.pw-eye{position:absolute;right:6px;flex:none;background:none;border:none;cursor:pointer;color:#8b949e;font-size:15px;padding:2px 4px;line-height:1;font-weight:normal}
+button.pw-eye:hover{color:#e6e6e6}
 </style>
 </head>
 <body>
@@ -70,6 +74,17 @@ function toast(msg, err) {
   clearTimeout(t._h); t._h = setTimeout(() => t.className = '', 3000);
 }
 
+function togglePw(id, btn) {
+  var inp = document.getElementById(id);
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    btn.style.color = '#F47B20';
+  } else {
+    inp.type = 'password';
+    btn.style.color = '';
+  }
+}
+
 function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
@@ -82,8 +97,11 @@ function cardHtml(p) {
     <label>Name</label><input type="text" id="name${p.slot}" maxlength="23" value="${esc(p.name)}">
     <label>SSID</label><input type="text" id="ssid${p.slot}" maxlength="32" value="${esc(p.ssid)}">
     <label>Password (WPA2, 8-63 chars)</label>
-    <input type="password" id="pass${p.slot}" maxlength="63" value=""
-      placeholder="${p.pass === PLACEHOLDER ? 'unchanged' : ''}" autocomplete="new-password">
+    <div class="pw-wrap">
+      <input type="password" id="pass${p.slot}" maxlength="63" value=""
+        placeholder="${p.pass === PLACEHOLDER ? 'unchanged' : ''}" autocomplete="new-password">
+      <button type="button" class="pw-eye" onclick="togglePw('pass${p.slot}',this)" title="Show/hide">&#x1F441;</button>
+    </div>
     <label>Subnet</label><select id="sub${p.slot}">${opts}</select>
     <label class="chk"><input type="checkbox" id="nat${p.slot}"${p.nat ? ' checked' : ''}> Share internet (NAT)</label>
     <div class="btns">

@@ -7,6 +7,13 @@
 // ============================================================
 
 // -----------------------------------------------------------
+//  Firmware version
+// -----------------------------------------------------------
+#define FW_VERSION    "6.2"
+// __DATE__ = "Oct 13 2026" (compiler-injected, MMM DD YYYY)
+// Reformatted to "DD Mon YYYY" at runtime (see display.ino / web_server.ino)
+
+// -----------------------------------------------------------
 //  LCD SPI pins  (JD9853 / Arduino_GFX)
 // -----------------------------------------------------------
 #define LCD_PIN_DC    45
@@ -183,6 +190,7 @@ enum TouchAction {
   ACT_NONE,
   ACT_TAP_LEFT, ACT_TAP_MID, ACT_TAP_RIGHT,
   ACT_SWIPE_UP, ACT_SWIPE_DOWN, ACT_SWIPE_LEFT, ACT_SWIPE_RIGHT,
+  ACT_TAP_HEADER,   // tap anywhere within the header bar (y < HDR_H)
 };
 
 // -----------------------------------------------------------

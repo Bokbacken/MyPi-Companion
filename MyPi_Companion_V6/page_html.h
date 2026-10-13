@@ -362,6 +362,7 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 <div class="ts" id="ts">Updating...</div>
 <div class="card">
 <h2>ESP32</h2>
+<div class="row"><span class="k">Firmware</span><span class="v acc" id="fw">---</span></div>
 <div class="row"><span class="k">Uptime</span><span class="v" id="uptime">---</span></div>
 <div class="row"><span class="k">Free heap</span><span class="v" id="heap">---</span></div>
 <div class="row"><span class="k">Sketch size</span><span class="v" id="sketch">---</span></div>
@@ -394,6 +395,7 @@ function poll(){
   fetch('/api/info').then(r=>r.json()).then(function(d){
     var now=new Date();
     document.getElementById('ts').textContent='Updated: '+now.toLocaleTimeString();
+    set('fw', d.fw_version ? 'v'+d.fw_version+(d.fw_date?' ('+d.fw_date+')':'') : '---');
     set('uptime', fmtUptime(d.millis));
     set('heap',   fmtBytes(d.heap));
     set('sketch', fmtBytes(d.sketch_size));
