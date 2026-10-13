@@ -52,7 +52,7 @@
 
 // Compact menu row — single-line text + minimal padding
 #define MENU_ROW_H     18     // 8 px text + 5 px top + 5 px bottom
-#define ADV_MENU_COUNT  6     // Advanced menu: AP, info, install, flip, AP on boot, back
+#define ADV_MENU_COUNT  7     // Advanced menu: AP, info, install CLI, install GUI, flip, AP on boot, back
 
 // Status bar pixel offsets from STATUS_TOP
 #define SB_ESP_IP    14   // ESP IP address  (textSize 2, 16 px)

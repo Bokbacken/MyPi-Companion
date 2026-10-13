@@ -178,6 +178,13 @@ char kbPass[65] = "";
 int  kbPassLen  = 0;
 char kbPendingSSID[33] = "";
 
+// KB mode — controls what kbOk() does after text entry
+enum KbMode { KB_MODE_WIFI, KB_MODE_INSTALL_USER, KB_MODE_INSTALL_PASS };
+KbMode kbMode = KB_MODE_WIFI;
+
+// Advanced menu: GUI install confirmation pending
+bool advGuiConfirmPending = false;
+
 // -----------------------------------------------------------
 //  ESP Wi-Fi scan state  (filled by pollWifiScan in touch.ino)
 //  Uses ESP32's own radio — 2.4 GHz only.
@@ -429,6 +436,7 @@ static void _loopBody() {
   // Async Wi-Fi scan polling
   if (currentState == STATE_ESP_SCAN) pollWifiScan();
   if (currentState == STATE_PI_SCAN)  pollPiScan();
+  pollApClients();
 
   // Install-on-Pi requested from web UI (set by handleApiInstallOnPi)
   if (pendingPiInstall) {

@@ -16,6 +16,9 @@
 //    +55  Pi SSID (wireless) / error / hint
 // ============================================================
 
+#include <esp_wifi.h>
+#include <esp_wifi_ap_get_sta_list.h>   // esp_wifi_ap_get_sta_list_with_ip() (IDF 5.x)
+
 // ── Text helpers ─────────────────────────────────────────────
 
 static void drawTxt(const char *s, int16_t x, int16_t y,
@@ -583,14 +586,35 @@ static const char * const KB_TAB_NAMES[KB_RANGE_COUNT] = {
   "az", "AZ", "09", "S1", "S2", "In"
 };
 
+// Map a Latin-1 byte (as stored in KB_RANGES[5] / kbPass) to the glyph
+// index of the built-in CP437 GFX font. Only the 20 KB "In" characters
+// need mapping; anything else is returned unchanged.
+static char _latin1ToCp437(char ch) {
+  switch ((uint8_t)ch) {
+    case 0xE5: return '\x86';  case 0xE4: return '\x84';  case 0xF6: return '\x94';  // å ä ö
+    case 0xC5: return '\x8F';  case 0xC4: return '\x8E';  case 0xD6: return '\x99';  // Å Ä Ö
+    case 0xE9: return '\x82';  case 0xE8: return '\x8A';  case 0xEA: return '\x88';  // é è ê
+    case 0xEB: return '\x89';  case 0xE0: return '\x85';  case 0xE2: return '\x83';  // ë à â
+    case 0xE7: return '\x87';  case 0xFC: return '\x81';  case 0xFB: return '\x96';  // ç ü û
+    case 0xF9: return '\x97';  case 0xFA: return '\xA3';  case 0xEE: return '\x8C';  // ù ú î
+    case 0xEF: return '\x8B';  case 0xF4: return '\x93';                             // ï ô
+    default:   return ch;
+  }
+}
+
+// Copy a Latin-1 string into buf with each byte mapped for the CP437 font
+static void _latin1ToCp437Str(const char *src, char *buf, int bufLen) {
+  int i = 0;
+  for (; src[i] && i < bufLen - 1; i++) buf[i] = _latin1ToCp437(src[i]);
+  buf[i] = '\0';
+}
+
 // Helper: build a displayable label for a character
 static void _kbCharLabel(char ch, char *buf, int bufLen) {
-  if ((uint8_t)ch > 0x7E) {
-    snprintf(buf, bufLen, "%02X", (uint8_t)ch);  // international → hex for now
-  } else if (ch == ' ') {
+  if (ch == ' ') {
     strlcpy(buf, "SPC", bufLen);
   } else {
-    buf[0] = ch; buf[1] = '\0';
+    buf[0] = _latin1ToCp437(ch); buf[1] = '\0';   // GFX font is CP437 (incl. >0x7E)
   }
 }
 
@@ -610,12 +634,15 @@ void drawEspKbContent() {
     if (kbPassLen == 0) {
       drawTxt("(empty = open)", 2, KB_Y_PASS, COL_DIM, COL_BG);
     } else if (kbPassLen <= 22) {
-      drawTxt(kbPass, 2, KB_Y_PASS, COL_TEXT, COL_BG);
+      char disp[24];
+      _latin1ToCp437Str(kbPass, disp, sizeof(disp));
+      drawTxt(disp, 2, KB_Y_PASS, COL_TEXT, COL_BG);
       int cx2 = 2 + kbPassLen * 6;
       if (cx2 < SCREEN_W - 4) gfx->fillRect(cx2, KB_Y_PASS, 3, 8, COL_TEXT);
     } else {
       char buf[24];
       snprintf(buf, sizeof(buf), "...%s", kbPass + kbPassLen - 19);
+      _latin1ToCp437Str(buf, buf, sizeof(buf));
       drawTxt(buf, 2, KB_Y_PASS, COL_TEXT, COL_BG);
       gfx->fillRect(2 + 22 * 6, KB_Y_PASS, 3, 8, COL_TEXT);
     }
@@ -698,13 +725,28 @@ void drawEspKbContent() {
 
 
 // ============================================================
-//  ADVANCED SUB-MENU  (6 items, compact)
+//  ADVANCED SUB-MENU  (7 items, compact)
 // ============================================================
 void drawAdvancedMenuContent() {
+  // GUI install confirmation overlay replaces the menu while pending
+  if (advGuiConfirmPending) {
+    gfx->fillRect(0, CONTENT_TOP, SCREEN_W, CONTENT_H, COL_BG);
+    int y = CONTENT_TOP + 20;
+    gfx->setTextSize(2);
+    drawTxt("Confirm:", 4, y, COL_ACCENT, COL_BG);
+    gfx->setTextSize(1);
+    y += 28;
+    drawTxt("Install GUI-Pi?", 4, y, COL_TEXT, COL_BG);
+    y += 20;
+    drawTxt("LEFT=Cancel  RIGHT=Yes", 4, y, COL_DIM, COL_BG);
+    return;
+  }
+
   const MenuItem items[ADV_MENU_COUNT] = {
     { "Start AP",         COL_TEXT },
     { "Show info",        COL_TEXT },
-    { "Install on Pi",    COL_TEXT },
+    { "Install CLI-Pi",   COL_TEXT },
+    { "Install GUI-Pi",   COL_TEXT },
     { "Flip display",     COL_TEXT },
     { apOnBoot ? "AP on boot  [ON]" : "AP on boot  [OFF]",
       apOnBoot ? COL_ACTIVE : COL_DIM },
@@ -786,6 +828,27 @@ void drawAdvInfoContent() {
 // ============================================================
 //  AP ACTIVE
 // ============================================================
+
+// OUI (first 3 MAC bytes) → manufacturer, or nullptr if unknown
+static const char* _ouiLookup(const uint8_t *mac) {
+  uint32_t oui = ((uint32_t)mac[0] << 16) | ((uint32_t)mac[1] << 8) | mac[2];
+  // Raspberry Pi Foundation / Trading
+  if (oui == 0xB827EB || oui == 0xDCA632 || oui == 0xE45F01 ||
+      oui == 0xD83ADD || oui == 0x2CCF67 || oui == 0x28CDC1) return "Raspberry Pi";
+  // Apple
+  if (oui == 0xA4C3F0 || oui == 0x3C0630 || oui == 0x8C8590 ||
+      oui == 0xA851AB || oui == 0x003EE1 || oui == 0x60F81D ||
+      oui == 0x186590) return "Apple";
+  // Intel
+  if (oui == 0x001B21 || oui == 0x8CEC4B || oui == 0xA434D9 ||
+      oui == 0x54271E || oui == 0x340286) return "Intel";
+  // Samsung
+  if (oui == 0x002637 || oui == 0xCC07AB || oui == 0x7840E4) return "Samsung";
+  // Google
+  if (oui == 0xF4F5D8 || oui == 0x546009) return "Google";
+  return nullptr;   // unknown — caller shows short MAC
+}
+
 void drawApActiveContent() {
   gfx->setTextSize(1);
   int y = CONTENT_TOP + 4;
@@ -813,10 +876,42 @@ void drawApActiveContent() {
   drawTxt("/update",  44, y, COL_DIM,  COL_BG);         y += R;
 
   gfx->drawFastHLine(4, y, SCREEN_W - 8, COL_BORDER);  y += 6;
-  drawTxt("Clients:", 4, y, COL_DIM, COL_BG);
-  char cl[4];
-  snprintf(cl, sizeof(cl), "%d", (int)WiFi.softAPgetStationNum());
-  drawTxt(cl, 64, y, COL_TEXT, COL_BG);  y += R;
+  // ── Client list: MAC from the Wi-Fi driver, IP from DHCP server/ARP ──
+  {
+    static wifi_sta_list_t        wsl;   // static: ~0.5 KB, keep off the stack
+    static wifi_sta_mac_ip_list_t ipl;
+    memset(&wsl, 0, sizeof(wsl));
+    memset(&ipl, 0, sizeof(ipl));
+    bool haveIp = false;
+    if (esp_wifi_ap_get_sta_list(&wsl) == ESP_OK)
+      haveIp = (esp_wifi_ap_get_sta_list_with_ip(&wsl, &ipl) == ESP_OK);
+    int num = wsl.num;
+
+    char hdr[24];
+    snprintf(hdr, sizeof(hdr), "Clients (%d):", num);
+    drawTxt(hdr, 4, y, COL_DIM, COL_BG);  y += R;
+
+    int show = num < 4 ? num : 4;      // screen space: max 4 rows
+    for (int i = 0; i < show; i++) {
+      const uint8_t *mac = wsl.sta[i].mac;
+      char ipStr[6] = ".?";
+      if (haveIp && ipl.sta[i].ip.addr != 0)
+        snprintf(ipStr, sizeof(ipStr), ".%d", (int)esp_ip4_addr4(&ipl.sta[i].ip));
+
+      const char *mfr = _ouiLookup(mac);
+      char line[32];
+      if (mfr) {
+        snprintf(line, sizeof(line), "%-4s %.20s", ipStr, mfr);
+      } else {
+        snprintf(line, sizeof(line), "%-4s %02x:%02x:%02x",
+                 ipStr, mac[3], mac[4], mac[5]);
+      }
+      drawTxt(line, 4, y, COL_TEXT, COL_BG);  y += R;
+    }
+    if (num == 0) {
+      drawTxt("(none)", 4, y, COL_DIM, COL_BG);  y += R;
+    }
+  }
 
   gfx->drawFastHLine(4, y, SCREEN_W - 8, COL_BORDER);  y += 6;
   drawTxt("Tap left: Close AP", 4, y, COL_DIM, COL_BG);
