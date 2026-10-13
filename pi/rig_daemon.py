@@ -177,11 +177,11 @@ def get_current_ip() -> str:
 
 
 def get_active_ifaces() -> List[Tuple[str, str]]:
-    """Return (display_name, ip) for all active non-loopback IPv4 interfaces.
+    """Return list of (iface_name, ip) for all active non-loopback IPv4 interfaces.
 
     Uses 'ip -4 -o addr show' (always available on Raspberry Pi OS).
-    For the Wi-Fi interface the current SSID is appended to the name.
-    Example: [("eth0", "192.168.1.5"), ("wlan0 TOFTA", "10.0.0.3")]
+    The SSID is sent separately via STATUS:SSID: and shown by the ESP
+    when the displayed interface is wireless.
     """
     result: List[Tuple[str, str]] = []
     try:
@@ -189,7 +189,6 @@ def get_active_ifaces() -> List[Tuple[str, str]]:
             ["ip", "-4", "-o", "addr", "show"],
             text=True, timeout=5,
         )
-        wifi_ssid = get_current_ssid()   # "NONE" if not connected
         for line in out.splitlines():
             parts = line.split()
             if len(parts) < 4:
@@ -198,12 +197,7 @@ def get_active_ifaces() -> List[Tuple[str, str]]:
             if iface == "lo":
                 continue
             ip = parts[3].split("/")[0]
-            if iface == WIFI_IFACE and wifi_ssid != "NONE":
-                name = f"{iface} {wifi_ssid}"   # e.g. "wlan0 TOFTA"
-            else:
-                name = iface                     # e.g. "eth0"
-            # ',' separates entries in STATUS:IFACES — keep it out of names
-            result.append((name.replace(",", " "), ip))
+            result.append((iface, ip))
     except Exception as exc:
         log.warning("get_active_ifaces error: %s", exc)
     return result
