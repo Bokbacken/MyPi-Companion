@@ -141,6 +141,12 @@ async function loadStatus(test) {
       ['Uplink (STA)', d.staConnected ? `<span class="ok">${esc(d.staSsid)}</span> ${d.staIp} (${d.staRssi} dBm)` : '<span class="bad">not connected</span>'],
       ['Uplink gateway', d.staGw],
       ['Uplink DNS', d.staDns],
+      ['Radio', `ch ${d.channel} · AP ${d.apBw} MHz · STA ${d.staBw} MHz · TX ${d.txPowerDbm} dBm · ` +
+                `<span class="${cls(!d.powerSave)}">power save ${d.powerSave ? 'ON' : 'off'}</span>`],
+      ['Uplink drops', d.staDrops
+        ? `<span class="bad">${d.staDrops}</span> — last ${esc(d.staLastReason)}, ${d.staLastDropAgoS} s ago`
+        : '<span class="ok">0</span>'],
+      ['ESP load', `loop max ${d.loopMaxMs} ms · heap ${d.heapFreeKb} kB (min ${d.heapMinKb} kB) · up ${Math.floor(d.uptimeS / 60)} min`],
     ];
     if (d.dnsTest !== undefined)
       rows.push(['ESP DNS test', `<span class="${cls(d.dnsTest !== 'FAIL')}">google.com → ${esc(d.dnsTest)}</span>`]);

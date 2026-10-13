@@ -58,12 +58,20 @@
 #include "storage_html.h" // STORAGE_HTML — storage page at /storage
 #include "ap_profiles_html.h" // AP_PROFILES_HTML — AP profile editor at /ap-profiles
 #include "logo_web.h"     // LOGO_WEB_PNG — MyPi Companion logo at /logo.png
+#include <esp_wifi.h>     // channel / power-save / bandwidth diagnostics
 
 // NAPT (internet sharing) state — see apNatService()
 static bool      _natActive  = false;  // NAPT currently enabled on the AP netif
 static bool      _natWanted  = false;  // active AP profile requests NAT
 static char      _natStatus[24] = "off"; // human-readable status for display/web
 static IPAddress _natDns;              // DNS server handed to AP clients
+
+// Diagnostics defined in wifi_manager.ino / MyPi_Companion_V6.ino
+// (wifi_manager.ino is concatenated after this file).
+extern volatile uint32_t staDropCount;
+extern volatile uint8_t  staLastReason;
+extern volatile uint32_t staLastDropMs;
+extern uint32_t loopMaxUs, loopMaxPrevUs;
 
 
 // ============================================================
@@ -954,6 +962,14 @@ void startAP(int profileSlot) {
 
   bool uplink = espConnected && _staUplink();
   WiFi.mode(espConnected ? WIFI_AP_STA : WIFI_AP);
+  WiFi.setSleep(false);   // re-assert: STA modem sleep throttles NAT traffic
+
+  // The ESP32-S3 has one radio, so AP and STA must share a channel.
+  // Start the AP directly on the STA channel instead of the default
+  // channel 1; otherwise the driver moves the AP afterwards and clients
+  // briefly lose the AP.
+  int apChannel = uplink ? WiFi.channel() : 1;
+  if (apChannel < 1 || apChannel > 13) apChannel = 1;
 
   // DNS handed to AP clients via DHCP.
   // When NAT is on, always use a public resolver (Cloudflare 1.1.1.1).
@@ -963,11 +979,14 @@ void startAP(int profileSlot) {
   _natWanted = prof.nat;
   _natDns = prof.nat ? IPAddress(1, 1, 1, 1) : IPAddress((uint32_t)0);
   WiFi.softAPConfig(dynApIp, dynApGw, dynApSn, IPAddress((uint32_t)0), _natDns);
-  WiFi.softAP(prof.ssid, prof.pass);
+  WiFi.softAP(prof.ssid, prof.pass, apChannel);
+  // 20 MHz AP: more robust on crowded 2.4 GHz (hotels, offices) and
+  // avoids HT40 secondary-channel conflicts with the STA uplink.
+  WiFi.softAPbandwidth(WIFI_BW_HT20);
 
-  Serial.printf("[AP] profile %d '%s' ip=%s nat=%d sta=%s uplink=%d dns=%s\n",
+  Serial.printf("[AP] profile %d '%s' ip=%s ch=%d nat=%d sta=%s uplink=%d dns=%s\n",
                 profileSlot + 1, prof.ssid, WiFi.softAPIP().toString().c_str(),
-                prof.nat, WiFi.localIP().toString().c_str(), uplink,
+                apChannel, prof.nat, WiFi.localIP().toString().c_str(), uplink,
                 _natDns.toString().c_str());
 
   if (!prof.nat)      strlcpy(_natStatus, "off", sizeof(_natStatus));
@@ -1021,6 +1040,30 @@ void handleApiApStatus() {
   j += ",\"staGw\":\""    + WiFi.gatewayIP().toString() + "\"";
   j += ",\"staDns\":\""   + WiFi.dnsIP(0).toString() + "\"";
   j += ",\"staRssi\":"    + String(WiFi.RSSI());
+
+  // Radio / performance diagnostics
+  uint8_t prim = 0; wifi_second_chan_t sec = WIFI_SECOND_CHAN_NONE;
+  esp_wifi_get_channel(&prim, &sec);
+  wifi_ps_type_t ps = WIFI_PS_NONE;
+  esp_wifi_get_ps(&ps);
+  wifi_bandwidth_t apBw  = WIFI_BW_HT20;
+  wifi_bandwidth_t staBw = WIFI_BW_HT20;
+  esp_wifi_get_bandwidth(WIFI_IF_AP,  &apBw);
+  esp_wifi_get_bandwidth(WIFI_IF_STA, &staBw);
+  j += ",\"channel\":"    + String(prim);
+  j += ",\"apBw\":"       + String(apBw  == WIFI_BW_HT40 ? 40 : 20);
+  j += ",\"staBw\":"      + String(staBw == WIFI_BW_HT40 ? 40 : 20);
+  j += ",\"powerSave\":"  + String(ps == WIFI_PS_NONE ? "false" : "true");
+  j += ",\"txPowerDbm\":" + String((int)WiFi.getTxPower() / 4.0f, 1);
+  j += ",\"staDrops\":"   + String(staDropCount);
+  if (staDropCount) {
+    j += ",\"staLastReason\":\"" + String(WiFi.disconnectReasonName((wifi_err_reason_t)staLastReason)) + "\"";
+    j += ",\"staLastDropAgoS\":" + String((millis() - staLastDropMs) / 1000UL);
+  }
+  j += ",\"loopMaxMs\":"  + String(max(loopMaxUs, loopMaxPrevUs) / 1000.0f, 1);
+  j += ",\"heapFreeKb\":" + String(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024);
+  j += ",\"heapMinKb\":"  + String(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024);
+  j += ",\"uptimeS\":"    + String(millis() / 1000UL);
   if (dnsTest.length()) j += ",\"dnsTest\":\"" + dnsTest + "\"";
   j += "}";
   server.send(200, "application/json", j);

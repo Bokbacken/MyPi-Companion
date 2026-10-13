@@ -23,10 +23,32 @@
 // ============================================================
 
 #include <ESPmDNS.h>
+#include <esp_wifi.h>   // esp_wifi_set_bandwidth — lock STA to HT20
 
 // espSSID, espIP, espConnected, pendingPiInstall, espMenuIndex
 // are declared in MyPi_Companion_V6.ino (the main .ino is
 // concatenated first, so all .ino files can see them).
+
+// -----------------------------------------------------------
+//  STA link diagnostics (shown on /ap-profiles via /api/apstatus)
+//  Written from the Arduino event task, read from loop().
+//  No Serial output here: Serial is the Pi protocol channel and
+//  printing from another task could interleave protocol lines.
+// -----------------------------------------------------------
+volatile uint32_t staDropCount   = 0;   // STA disconnects since boot
+volatile uint8_t  staLastReason  = 0;   // wifi_err_reason_t of last drop
+volatile uint32_t staLastDropMs  = 0;   // millis() of last drop
+
+static void _onStaDisconnected(arduino_event_id_t, arduino_event_info_t info) {
+  staDropCount++;
+  staLastReason = info.wifi_sta_disconnected.reason;
+  staLastDropMs = millis();
+}
+
+// Call once in setup(), before the first WiFi.mode().
+void wifiDiagInit() {
+  WiFi.onEvent(_onStaDisconnected, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+}
 
 // -----------------------------------------------------------
 //  Internal helpers
@@ -75,7 +97,11 @@ static void _onConnected() {
 // -----------------------------------------------------------
 void wifiAutoConnect() {
   WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);   // keep radio awake for low-latency serial
+  WiFi.setSleep(false);
+  // Lock STA to 20 MHz before any connection attempt.
+  // In AP_STA mode both interfaces share one radio; if STA negotiates
+  // HT40 the whole radio runs at 40 MHz even when AP is set to HT20.
+  esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20);
 
   // Count valid slots — nothing to do if pool is empty
   int validCount = 0;
@@ -129,6 +155,7 @@ bool wifiConnectSlot(int slot) {
 
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
+  esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20);
 
   if (_connectSlot(slot)) {
     _onConnected();
