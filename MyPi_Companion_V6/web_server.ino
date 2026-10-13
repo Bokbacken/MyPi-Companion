@@ -73,6 +73,11 @@ extern volatile uint8_t  staLastReason;
 extern volatile uint32_t staLastDropMs;
 extern uint32_t loopMaxUs, loopMaxPrevUs;
 
+// Install progress defined in hid.ino (concatenated before this file).
+extern char     hidStatusMsg[2][24];
+extern bool     hidStatusErr[2];
+extern volatile bool hidInstallActive;
+
 
 // ============================================================
 //  BASIC HTTP HANDLERS
@@ -228,6 +233,18 @@ void handleApiInstallOnPi() {
       : "Installation started via USB HID - watch the Pi display.");
 }
 
+
+// GET /api/installstatus — live install progress for the web page
+void handleApiInstallStatus() {
+  char line0[28], line1[28];
+  snprintf(line0, sizeof(line0), "%s", hidStatusMsg[0]);
+  snprintf(line1, sizeof(line1), "%s", hidStatusMsg[1]);
+  String json = String("{\"running\":") + (hidInstallActive ? "true" : "false") +
+                ",\"err\":"  + ((hidStatusErr[0] || hidStatusErr[1]) ? "true" : "false") +
+                ",\"line0\":\"" + line0 + "\"" +
+                ",\"line1\":\"" + line1 + "\"}";
+  server.send(200, "application/json", json);
+}
 
 // ============================================================
 //  PROFILE MANAGER HANDLERS  (NVS slots — shared pool)
@@ -713,7 +730,8 @@ void startWebServer() {
   server.on("/api/info",  handleApiInfo);
   server.on("/addwifi",   HTTP_POST, handleAddWifi);
   server.on("/api/installonpi", HTTP_POST, handleApiInstallOnPi);
-  server.on("/api/installcfg",  HTTP_GET,  handleApiInstallCfg);
+  server.on("/api/installcfg",    HTTP_GET,  handleApiInstallCfg);
+  server.on("/api/installstatus", HTTP_GET,  handleApiInstallStatus);
 
   // ── NVS profile manager ────────────────────────────────────
   server.on("/profiles",          handleProfiles);

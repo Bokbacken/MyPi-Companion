@@ -226,6 +226,8 @@ ul{font-size:13px;color:#8b949e;padding-left:18px;margin-bottom:14px;line-height
 .in{width:100%;padding:9px;background:#0d1117;color:#e6e6e6;border:1px solid #30363d;border-radius:6px;font-size:14px;margin-bottom:6px}
 footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 .wavesep{line-height:0;display:block;margin:0;padding:0}
+.progress{margin-top:10px;padding:10px 12px;background:#0a0e13;border:1px solid #30363d;border-radius:6px;font-family:monospace;font-size:13px;color:#58a6ff;display:none;line-height:1.6}
+.progress.err{color:#f85149;border-color:#6e1f1f}
 </style></head><body>
 <div class="hdr">
 <img src="/logo.png" alt="MyPi"><div><a class="back" href="/">← Dashboard</a><h1>Install on Pi</h1></div>
@@ -266,6 +268,7 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 <ul><li>Takes about 1–2 minutes — do not disconnect USB</li></ul>
 <button class="btn" id="btn" onclick="install()">Install / Reinstall on Pi</button>
 <div class="msg" id="msg"></div>
+<div class="progress" id="prog"></div>
 </div>
 <footer><a href="/" style="color:#484f58">MyPi Companion</a></footer>
 <script>
@@ -291,11 +294,24 @@ function install(){
   .then(function(r){return r.text().then(function(t){return {ok:r.ok,t:t};});})
   .then(function(x){
     $('pass').value='';show(x.t,!x.ok);
-    if(x.ok){b.textContent='Installation started';setTimeout(function(){b.disabled=false;b.textContent='Install / Reinstall on Pi';},20000);}
+    if(x.ok){b.textContent='Installation started';startPoll();setTimeout(function(){b.disabled=false;b.textContent='Install / Reinstall on Pi';},20000);}
     else{b.disabled=false;b.textContent='Install / Reinstall on Pi';}
   }).catch(function(){
     show('Connection error',true);b.disabled=false;b.textContent='Install / Reinstall on Pi';
   });
+}
+var _pt=null;
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function startPoll(){
+  var pg=$('prog');pg.style.display='block';
+  if(_pt)clearInterval(_pt);
+  _pt=setInterval(function(){
+    fetch('/api/installstatus').then(function(r){return r.json();}).then(function(d){
+      pg.className=d.err?'progress err':'progress';
+      pg.innerHTML=(d.line0?'<span>'+esc(d.line0)+'</span><br>':'')+(d.line1?'<span>'+esc(d.line1)+'</span>':'');
+      if(!d.running){clearInterval(_pt);_pt=null;}
+    }).catch(function(){});
+  },1000);
 }
 </script></body></html>)html";
 

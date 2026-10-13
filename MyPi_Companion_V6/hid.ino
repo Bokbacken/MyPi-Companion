@@ -59,6 +59,11 @@ static const char *const HID_LAYOUT_NAMES[] = {
 static const uint8_t HID_LAYOUT_COUNT = sizeof(HID_LAYOUTS) / sizeof(HID_LAYOUTS[0]);
 static uint8_t hidLayoutIdx = 0;   // last detected layout (RAM only)
 
+// Install progress — written by hidSetStatus(), read via /api/installstatus
+char     hidStatusMsg[2][24]  = {"", ""};
+bool     hidStatusErr[2]      = {false, false};
+volatile bool hidInstallActive = false;
+
 // Press and release one key with the given modifier bits.
 static void hidSendKey(uint8_t mods, uint8_t code) {
   KeyReport r = { mods, 0, { code, 0, 0, 0, 0, 0 } };
@@ -97,6 +102,10 @@ static void hidCancelLine() {
 //  line 0 = main status, line 1 = detail / path / countdown.
 // ----------------------------------------------------------
 static void hidSetStatus(uint8_t line, const char *msg, uint16_t col) {
+  if (line < 2) {
+    strlcpy(hidStatusMsg[line], msg, sizeof(hidStatusMsg[0]));
+    hidStatusErr[line] = (col == COL_ERR);
+  }
   int16_t y = (line == 0) ? CONTENT_TOP + 20 : CONTENT_TOP + 40;
   char buf[24];
   snprintf(buf, sizeof(buf), "%-20s", msg);
@@ -417,12 +426,18 @@ void hidInstallOnPi() {
   String mountPath, acmPort;
   bool weLoggedIn = false, mounted = false;
 
+  hidStatusMsg[0][0] = 0;
+  hidStatusMsg[1][0] = 0;
+  hidStatusErr[0] = hidStatusErr[1] = false;
+  hidInstallActive = true;
+
   if (cli && (!piUser[0] || !piPass[0])) {
     // The password only lives in RAM and is wiped after each attempt,
     // so CLI installs must be started from the web page.
     hidSetStatus(0, "ERR: no login", COL_ERR);
     hidSetStatus(1, "Start from web", COL_ERR);
     hidWipePass();
+    hidInstallActive = false;
     return;
   }
 
@@ -453,6 +468,7 @@ void hidInstallOnPi() {
     if (cli) hidCliCleanup(mounted, weLoggedIn);
     hidWipePass();
     mscEject();
+    hidInstallActive = false;
     return;
   }
 
@@ -495,6 +511,7 @@ void hidInstallOnPi() {
             delay(20);
           }
           mscEject();   // graceful if connected, plain removal otherwise
+          hidInstallActive = false;
           return;
         }
         else if (rxLine.startsWith("RIG:INSTALL_ERR")) {
@@ -505,6 +522,7 @@ void hidInstallOnPi() {
           if (cli) hidCliCleanup(mounted, weLoggedIn);
           hidWipePass();
           mscEject();
+          hidInstallActive = false;
           return;
         }
         rxLine = "";
@@ -520,6 +538,7 @@ void hidInstallOnPi() {
   mscEject();
   hidSetStatus(0, "Timeout!", COL_ERR);
   hidSetStatus(1, "Check Pi screen", COL_ERR);
+  hidInstallActive = false;
 }
 
 // ----------------------------------------------------------
