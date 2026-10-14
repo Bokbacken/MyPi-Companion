@@ -520,6 +520,9 @@ void handleApiEspScanGet() {
 // ============================================================
 static size_t _otaTotal   = 0;
 static size_t _otaWritten = 0;
+// -1=idle  0-95=flashing (5% steps)  100=done  -2=error
+static int    _otaPct     = -1;
+static char   _otaErr[48] = "";
 
 void handleOtaPage() {
   server.send_P(200, "text/html", OTA_HTML);
@@ -531,8 +534,12 @@ void handleOtaUpload() {
   if (upload.status == UPLOAD_FILE_START) {
     _otaTotal   = 0;
     _otaWritten = 0;
+    _otaPct     = 0;
+    _otaErr[0]  = '\0';
     drawOtaScreen(-1);
     if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+      _otaPct = -2;
+      strlcpy(_otaErr, Update.errorString(), sizeof(_otaErr));
       drawOtaError("Begin failed");
     }
 
@@ -546,24 +553,48 @@ void handleOtaUpload() {
       _otaTotal = (size_t)server.header("Content-Length").toInt();
     }
     if (_otaTotal > 0) {
-      int pct = (int)((uint64_t)_otaWritten * 100 / _otaTotal);
-      drawOtaScreen(constrain(pct, 0, 99));
+      int pct = constrain((int)((uint64_t)_otaWritten * 100 / _otaTotal), 0, 99);
+      int step = pct / 5;                 // 0..19
+      if (step > _otaPct / 5) {           // new 5 % threshold crossed
+        _otaPct = step * 5;
+        drawOtaScreen(_otaPct);           // only redraw at 0/5/10/.../95 %
+      }
     }
 
   } else if (upload.status == UPLOAD_FILE_END) {
     if (Update.end(true)) {
+      _otaPct = 100;
       drawOtaScreen(101);
     } else {
+      _otaPct = -2;
+      strlcpy(_otaErr, Update.errorString(), sizeof(_otaErr));
       char errBuf[40];
-      snprintf(errBuf, sizeof(errBuf), "End failed: %s",
-               Update.errorString());
+      snprintf(errBuf, sizeof(errBuf), "End: %s", Update.errorString());
       drawOtaError(errBuf);
     }
 
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
+    _otaPct = -2;
+    strlcpy(_otaErr, "Aborted", sizeof(_otaErr));
     Update.abort();
     drawOtaError("Aborted");
   }
+}
+
+// GET /api/otaprogress — browser polls this every 500 ms to track flash progress.
+// Returns {"pct":N,"busy":true/false,"err":"..."} where pct is -1 (idle),
+// 0/5/10/.../95 (flashing, 5 % steps), or 100 (done).
+void handleOtaProgress() {
+  char pct_s[8];
+  int  pct  = (_otaPct < 0) ? -1 : _otaPct;
+  bool busy = (_otaPct >= 0 && _otaPct < 100);
+  // escape single quotes in error string for JSON safety
+  char err[48]; strlcpy(err, _otaErr, sizeof(err));
+  char buf[100];
+  snprintf(buf, sizeof(buf), "{\"pct\":%d,\"busy\":%s,\"err\":\"%s\"}",
+           pct, busy ? "true" : "false", err);
+  server.sendHeader("Cache-Control", "no-cache");
+  server.send(200, "application/json", buf);
 }
 
 // Runs after the whole request has been received — always sends exactly
@@ -980,7 +1011,8 @@ void startWebServer() {
   server.on("/api/apstatus",       HTTP_GET,  handleApiApStatus);
 
   // ── OTA ────────────────────────────────────────────────────
-  server.on("/update", HTTP_GET,  handleOtaPage);
+  server.on("/update",           HTTP_GET,  handleOtaPage);
+  server.on("/api/otaprogress",  HTTP_GET,  handleOtaProgress);
   server.on("/update", HTTP_POST,
     handleOtaDone,
     handleOtaUpload
