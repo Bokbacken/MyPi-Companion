@@ -52,7 +52,7 @@ footer{text-align:center;padding:14px;font-size:11px;color:#484f58}
 .scan-row:hover{background:#1c2330}.scan-row span:last-child{color:#8b949e;font-size:11px}
 #scan-list{max-height:220px;overflow-y:auto;margin-top:6px}
 </style></head><body>
-<div class="hdr"><a href="/">&#8592;</a><h1>Profile Manager</h1></div>
+<div class="hdr"><a href="/index.html">&#8592;</a><h1>Profile Manager</h1></div>
 
 <div class="card">
 <h2>ESP32 Wi-Fi Connection <span class="badge">ESP</span></h2>

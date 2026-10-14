@@ -121,7 +121,7 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 .wavesep{line-height:0;display:block;margin:0;padding:0}
 </style></head><body>
 <div class="hdr">
-<img src="/logo.png" alt="MyPi"><div><a class="back" href="/">← Dashboard</a><h1>Pi Networks</h1></div>
+<img src="/logo.png" alt="MyPi"><div><a class="back" href="/index.html">← Dashboard</a><h1>Pi Networks</h1></div>
 </div>
 <div class="wavesep" style="line-height:0;display:block;margin:0;padding:0"><svg viewBox="0 0 900 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" style="display:block;width:100%;height:20px;margin:0"><path d="M0,15L10,15L10,3L20,3L30,3L30,15L40,15L50,15L60,15L70,15L70,3L80,3L80,15L90,15L90,3L100,3L100,15L110,15L110,3L120,3L130,3L140,3L150,3L150,15L160,15L160,3L170,3L180,3L180,15L190,15L190,3L200,3L200,15L210,15L210,3L220,3L220,15L230,15L230,3L240,3L250,3L250,15L260,15L260,3L270,3L280,3L280,15L290,15L290,3L300,3L300,15L310,15L320,15L330,15L340,15L350,15L350,3L360,3L370,3L380,3L380,15L390,15L390,3L400,3L400,15L410,15L410,3L420,3L420,15L430,15L440,15L450,15L460,15L460,3L470,3L480,3L480,15L490,15L490,3L500,3L500,15L510,15L520,15L520,3L530,3L540,3L550,3L550,15L560,15L560,3L570,3L580,3L580,15L590,15L590,3L600,3L600,15L610,15L610,3L620,3L620,15L630,15L640,15L640,3L650,3L650,15L660,15L660,3L670,3L680,3L680,15L690,15L690,3L700,3L700,15L710,15L710,3L720,3L730,3L740,3L750,3L750,15L760,15L760,3L770,3L780,3L780,15L790,15L790,3L800,3L800,15L810,15L820,15L820,3L830,3L840,3L850,3L850,15L860,15L860,3L870,3L880,3L880,15L890,15L890,3L900,3" stroke="#4CC870" stroke-width="1.5" fill="none"/></svg></div>
 <div class="card">
@@ -142,7 +142,7 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 </form>
 </div>
 <div class="msg" id="msg"></div>
-<footer><a href="/" style="color:#484f58">MyPi Companion</a></footer>
+<footer><a href="/index.html" style="color:#484f58">MyPi Companion</a></footer>
 <script>
 var polling=true,curSsid='',curConn='';
 function showMsg(t,e){var m=document.getElementById('msg');m.textContent=t;m.className='msg'+(e?' err':'');m.style.display='block';}
@@ -239,7 +239,7 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 .progress.err{color:#f85149;border-color:#6e1f1f}
 </style></head><body>
 <div class="hdr">
-<img src="/logo.png" alt="MyPi"><div><a class="back" href="/">← Dashboard</a><h1>Install on Pi</h1></div>
+<img src="/logo.png" alt="MyPi"><div><a class="back" href="/index.html">← Dashboard</a><h1>Install on Pi</h1></div>
 </div>
 <div class="wavesep" style="line-height:0;display:block;margin:0;padding:0"><svg viewBox="0 0 900 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" style="display:block;width:100%;height:20px;margin:0"><path d="M0,15L10,15L10,3L20,3L30,3L30,15L40,15L50,15L60,15L70,15L70,3L80,3L80,15L90,15L90,3L100,3L100,15L110,15L110,3L120,3L130,3L140,3L150,3L150,15L160,15L160,3L170,3L180,3L180,15L190,15L190,3L200,3L200,15L210,15L210,3L220,3L220,15L230,15L230,3L240,3L250,3L250,15L260,15L260,3L270,3L280,3L280,15L290,15L290,3L300,3L300,15L310,15L320,15L330,15L340,15L350,15L350,3L360,3L370,3L380,3L380,15L390,15L390,3L400,3L400,15L410,15L410,3L420,3L420,15L430,15L440,15L450,15L460,15L460,3L470,3L480,3L480,15L490,15L490,3L500,3L500,15L510,15L520,15L520,3L530,3L540,3L550,3L550,15L560,15L560,3L570,3L580,3L580,15L590,15L590,3L600,3L600,15L610,15L610,3L620,3L620,15L630,15L640,15L640,3L650,3L650,15L660,15L660,3L670,3L680,3L680,15L690,15L690,3L700,3L700,15L710,15L710,3L720,3L730,3L740,3L750,3L750,15L760,15L760,3L770,3L780,3L780,15L790,15L790,3L800,3L800,15L810,15L820,15L820,3L830,3L840,3L850,3L850,15L860,15L860,3L870,3L880,3L880,15L890,15L890,3L900,3" stroke="#4CC870" stroke-width="1.5" fill="none"/></svg></div>
 <div class="card">
@@ -279,7 +279,7 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 <div class="msg" id="msg"></div>
 <div class="progress" id="prog"></div>
 </div>
-<footer><a href="/" style="color:#484f58">MyPi Companion</a></footer>
+<footer><a href="/index.html" style="color:#484f58">MyPi Companion</a></footer>
 <script>
 function $(i){return document.getElementById(i);}
 function mode(){return document.querySelector('input[name=mode]:checked').value;}
@@ -356,7 +356,7 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 .wavesep{line-height:0;display:block;margin:0;padding:0}
 </style></head><body>
 <div class="hdr">
-<img src="/logo.png" alt="MyPi"><div><a class="back" href="/">← Dashboard</a><h1>System Info</h1></div>
+<img src="/logo.png" alt="MyPi"><div><a class="back" href="/index.html">← Dashboard</a><h1>System Info</h1></div>
 </div>
 <div class="wavesep" style="line-height:0;display:block;margin:0;padding:0"><svg viewBox="0 0 900 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" style="display:block;width:100%;height:20px;margin:0"><path d="M0,15L10,15L10,3L20,3L30,3L30,15L40,15L50,15L60,15L70,15L70,3L80,3L80,15L90,15L90,3L100,3L100,15L110,15L110,3L120,3L130,3L140,3L150,3L150,15L160,15L160,3L170,3L180,3L180,15L190,15L190,3L200,3L200,15L210,15L210,3L220,3L220,15L230,15L230,3L240,3L250,3L250,15L260,15L260,3L270,3L280,3L280,15L290,15L290,3L300,3L300,15L310,15L320,15L330,15L340,15L350,15L350,3L360,3L370,3L380,3L380,15L390,15L390,3L400,3L400,15L410,15L410,3L420,3L420,15L430,15L440,15L450,15L460,15L460,3L470,3L480,3L480,15L490,15L490,3L500,3L500,15L510,15L520,15L520,3L530,3L540,3L550,3L550,15L560,15L560,3L570,3L580,3L580,15L590,15L590,3L600,3L600,15L610,15L610,3L620,3L620,15L630,15L640,15L640,3L650,3L650,15L660,15L660,3L670,3L680,3L680,15L690,15L690,3L700,3L700,15L710,15L710,3L720,3L730,3L740,3L750,3L750,15L760,15L760,3L770,3L780,3L780,15L790,15L790,3L800,3L800,15L810,15L820,15L820,3L830,3L840,3L850,3L850,15L860,15L860,3L870,3L880,3L880,15L890,15L890,3L900,3" stroke="#4CC870" stroke-width="1.5" fill="none"/></svg></div>
 <div class="ts" id="ts">Updating...</div>
@@ -382,7 +382,7 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 <h2>Raspberry Pi</h2>
 <div id="pi-sys"><div class="row"><span class="k">No data yet</span><span class="v">---</span></div></div>
 </div>
-<footer><a href="/" style="color:#484f58">MyPi Companion</a></footer>
+<footer><a href="/index.html" style="color:#484f58">MyPi Companion</a></footer>
 <script>
 // STATUS:SYS keys → label + formatter; keys not listed here are shown raw
 var SYS={
@@ -485,7 +485,7 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 .wavesep{line-height:0;display:block;margin:0;padding:0}
 </style></head><body>
 <div class="hdr">
-<img src="/logo.png" alt="MyPi"><div><a class="back" href="/">← Dashboard</a><h1>OTA Update</h1></div>
+<img src="/logo.png" alt="MyPi"><div><a class="back" href="/index.html">← Dashboard</a><h1>OTA Update</h1></div>
 </div>
 <div class="wavesep" style="line-height:0;display:block;margin:0;padding:0"><svg viewBox="0 0 900 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" style="display:block;width:100%;height:20px;margin:0"><path d="M0,15L10,15L10,3L20,3L30,3L30,15L40,15L50,15L60,15L70,15L70,3L80,3L80,15L90,15L90,3L100,3L100,15L110,15L110,3L120,3L130,3L140,3L150,3L150,15L160,15L160,3L170,3L180,3L180,15L190,15L190,3L200,3L200,15L210,15L210,3L220,3L220,15L230,15L230,3L240,3L250,3L250,15L260,15L260,3L270,3L280,3L280,15L290,15L290,3L300,3L300,15L310,15L320,15L330,15L340,15L350,15L350,3L360,3L370,3L380,3L380,15L390,15L390,3L400,3L400,15L410,15L410,3L420,3L420,15L430,15L440,15L450,15L460,15L460,3L470,3L480,3L480,15L490,15L490,3L500,3L500,15L510,15L520,15L520,3L530,3L540,3L550,3L550,15L560,15L560,3L570,3L580,3L580,15L590,15L590,3L600,3L600,15L610,15L610,3L620,3L620,15L630,15L640,15L640,3L650,3L650,15L660,15L660,3L670,3L680,3L680,15L690,15L690,3L700,3L700,15L710,15L710,3L720,3L730,3L740,3L750,3L750,15L760,15L760,3L770,3L780,3L780,15L790,15L790,3L800,3L800,15L810,15L820,15L820,3L830,3L840,3L850,3L850,15L860,15L860,3L870,3L880,3L880,15L890,15L890,3L900,3" stroke="#4CC870" stroke-width="1.5" fill="none"/></svg></div>
 <div class="card">
@@ -500,7 +500,7 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 </div>
 <div id="result"></div>
 </div>
-<footer><a href="/" style="color:#484f58">MyPi Companion</a></footer>
+<footer><a href="/index.html" style="color:#484f58">MyPi Companion</a></footer>
 <script>
 // OTA: upload progress -> indeterminate wait -> done/error.
 // xhr.upload.onprogress tracks browser->ESP data transfer (fast on local WiFi).

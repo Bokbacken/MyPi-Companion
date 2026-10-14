@@ -86,7 +86,7 @@ ul.files{list-style:none;font-family:var(--mono);font-size:12px;color:var(--mute
 <body>
 <nav>
   <span class="logo">⚡ MyPi Companion</span>
-  <a href="/">Home</a>
+  <a href="/index.html">Home</a>
   <a href="/macros">Macros</a>
   <a href="/terminal">Terminal</a>
   <a href="/storage" class="on">Storage</a>
