@@ -63,7 +63,7 @@ button.pw-eye:hover,button.pw-eye.on{color:#F47B20}
 </head>
 <body>
 <div class="hdr">
-<a href="/" title="Back">&#8592;</a>
+<a href="/index.html" title="Back">&#8592;</a>
 <img src="/logo.png" alt="MyPi">
 <h1>AP Profiles</h1>
 </div>
