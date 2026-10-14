@@ -1272,10 +1272,15 @@ void handleApiApStatus() {
       const char *oui = _ouiLookup(mac);
       char macSuffix[10];
       snprintf(macSuffix, sizeof(macSuffix), "%02x:%02x:%02x", mac[3], mac[4], mac[5]);
-      char entry[128];
+      // host: sanitized to [A-Za-z0-9 ._-] in client_names.ino → no JSON escaping needed
+      const char *host = clientNameFor(mac);
+      char entry[200];
       snprintf(entry, sizeof(entry),
-               "%s{\"ip\":\"%s\",\"dot\":%d,\"label\":\"%s\",\"mac\":\"%02x:%02x:%02x:%02x:%02x:%02x\"}",
-               ci ? "," : "", ipStr, lastOctet, oui ? oui : macSuffix,
+               "%s{\"ip\":\"%s\",\"dot\":%d,\"label\":\"%s\",\"host\":\"%s\",\"hostSrc\":\"%s\","
+               "\"vendor\":\"%s\",\"mac\":\"%02x:%02x:%02x:%02x:%02x:%02x\"}",
+               ci ? "," : "", ipStr, lastOctet,
+               host ? host : (oui ? oui : macSuffix),
+               host ? host : "", clientNameSrc(mac), oui ? oui : "",
                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
       j += entry;
     }

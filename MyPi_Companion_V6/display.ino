@@ -1130,9 +1130,12 @@ void drawApActiveContent() {
       if (haveIp && ipl.sta[i].ip.addr != 0)
         snprintf(ipStr, sizeof(ipStr), ".%d", (int)esp_ip4_addr4(&ipl.sta[i].ip));
 
-      const char *mfr = _ouiLookup(mac);
+      const char *host = clientNameFor(mac);
+      const char *mfr  = _ouiLookup(mac);
       char line[32];
-      if (mfr) {
+      if (host) {
+        snprintf(line, sizeof(line), "%-4s %.22s", ipStr, host);
+      } else if (mfr) {
         snprintf(line, sizeof(line), "%-4s %.20s", ipStr, mfr);
       } else {
         snprintf(line, sizeof(line), "%-4s %02x:%02x:%02x",

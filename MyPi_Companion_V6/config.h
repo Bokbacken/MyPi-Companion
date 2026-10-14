@@ -184,6 +184,21 @@ struct PiIface {
   char ip[16];                      // e.g. "192.168.1.5"
 };
 
+// AP client host-name cache (client_names.ino)
+#define CN_MAX       10             // AP max clients
+#define CN_NAME_LEN  24
+enum { CN_SRC_NONE = 0, CN_SRC_PI, CN_SRC_MDNS, CN_SRC_NBNS };
+struct ClientName {
+  uint8_t  mac[6];
+  uint32_t ip;                      // lwIP order (esp_ip4_addr_t.addr), 0 = none yet
+  char     name[CN_NAME_LEN];
+  uint8_t  src;                     // CN_SRC_*
+  uint8_t  tries;
+  uint16_t qid;                     // DNS id of the last mDNS query
+  uint32_t nextMs;
+  bool     used;
+};
+
 // Pi system info (STATUS:SYS:k=v|k=v…) — generic key/value table so the
 // daemon can add keys without a firmware change (unknown keys reach /api/info)
 #define MAX_PI_SYS        24

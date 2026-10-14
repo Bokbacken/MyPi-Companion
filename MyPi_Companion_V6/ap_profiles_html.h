@@ -182,7 +182,9 @@ async function loadStatus(test) {
     // Connected AP clients, right after the AP row
     if (d.apActive && d.clientList && d.clientList.length > 0) {
       const cl = d.clientList.map((c, i) =>
-        [`&nbsp;&nbsp;Client ${i + 1}`, `${c.dot >= 0 ? '.' + c.dot : '?.?'}&nbsp;&nbsp;${esc(c.label)} <span style="color:#8b949e">${esc(c.mac)}</span>`]);
+        [`&nbsp;&nbsp;Client ${i + 1}`, `${c.dot >= 0 ? '.' + c.dot : '?.?'}&nbsp;&nbsp;${esc(c.label)}`
+          + (c.host && c.vendor ? ` <span style="color:#8b949e">(${esc(c.vendor)})</span>` : '')
+          + ` <span style="color:#8b949e" title="${c.hostSrc ? 'name via ' + esc(c.hostSrc) : 'no host name yet'}">${esc(c.mac)}</span>`]);
       rows.splice(1, 0, ...cl);
     }
     if (d.dnsTest !== undefined)

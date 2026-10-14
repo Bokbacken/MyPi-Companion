@@ -500,6 +500,7 @@ static void _loopBody() {
 
   // Keep NAT in sync with the STA uplink while the AP is running
   apNatService();
+  clientNameService();   // host names for AP clients (Pi / mDNS / NetBIOS)
 
   unsigned long now = millis();
 
