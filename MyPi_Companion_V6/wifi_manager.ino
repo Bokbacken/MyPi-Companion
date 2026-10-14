@@ -13,8 +13,16 @@
 //
 //  Public API:
 //    wifiAutoConnect()        — call once in setup()
-//    wifiConnectSlot(int)     — connect to one NVS slot (manual)
+//    wifiConnectSlot(int)     — start a non-blocking connect to one
+//                               NVS slot (touch menu / web UI)
+//    wifiService()            — call every loop(); finishes the
+//                               connect started by wifiConnectSlot()
 //    wifiDisconnect()         — drop current STA connection
+//
+//  AP coexistence: when the AP is running (apRunning), STA work is
+//  done in WIFI_AP_STA mode and never tears down the AP or the web
+//  server. Note the radio has one channel: when STA associates, the
+//  AP follows the STA channel and AP clients may reconnect briefly.
 //    wifiScanStart()          — begin async SSID scan
 //    wifiScanResults(...)     — retrieve results (call after scan)
 //    espSSID[33]              — current ESP SSID (or "---")
@@ -131,6 +139,7 @@ void wifiAutoConnect() {
 
     if (_connectSlot(slot)) {
       WiFi.scanDelete();   // free scan memory
+      espActiveSlot = slot;
       _onConnected();
       return;
     }
@@ -142,40 +151,89 @@ void wifiAutoConnect() {
 
 // -----------------------------------------------------------
 //  wifiConnectSlot()
-//  Manual connect from the touch menu.  Disconnects first if
-//  already connected.  Updates display globals.
+//  Manual connect (touch menu or web UI). Non-blocking: drops any
+//  current STA link, starts WiFi.begin() and returns at once.
+//  wifiService() completes or times out the attempt from loop(),
+//  so the web server, AP and touch stay responsive meanwhile.
+//  Returns false only for an invalid/empty slot.
 // -----------------------------------------------------------
+// espConnecting / espConnSlot / espConnResult / espConnTarget are
+// declared in MyPi_Companion_V6.ino (visible to display + web code).
+static unsigned long _connT0 = 0;
+
 bool wifiConnectSlot(int slot) {
   if (slot < 0 || slot >= MAX_NVS_SLOTS) return false;
   if (!nvsProfiles[slot].valid) return false;
 
-  // Tear down any existing STA connection / web server
+  // Drop any existing STA link. Keeps AP + web server if the AP runs.
   wifiDisconnect();
-  delay(200);
+  delay(100);
 
-  WiFi.mode(WIFI_STA);
+  // AP_STA keeps the AP alive; plain STA otherwise.
+  WiFi.mode(apRunning ? WIFI_AP_STA : WIFI_STA);
   WiFi.setSleep(false);
   esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20);
+  WiFi.begin(nvsProfiles[slot].ssid, nvsProfiles[slot].pass);
 
-  if (_connectSlot(slot)) {
-    _onConnected();
-    return true;
+  espConnecting = true;
+  espConnSlot   = slot;
+  espConnResult = 0;
+  strlcpy(espConnTarget, nvsProfiles[slot].ssid, sizeof(espConnTarget));
+  _connT0 = millis();
+  Serial.printf("[WIFI] connecting to '%s' (slot %d, ap=%d)\n",
+                espConnTarget, slot + 1, apRunning);
+  return true;
+}
+
+// -----------------------------------------------------------
+//  wifiService()
+//  Called every loop(). Finishes a pending wifiConnectSlot().
+// -----------------------------------------------------------
+void wifiService() {
+  if (!espConnecting) return;
+
+  bool done = WiFi.status() == WL_CONNECTED &&
+              WiFi.localIP() != IPAddress((uint32_t)0);
+  if (done) {
+    espConnecting = false;
+    espConnResult = 1;
+    espActiveSlot = espConnSlot;
+    _onConnected();          // web server is a no-op if already running
+  } else if (millis() - _connT0 >= WIFI_CONNECT_TIMEOUT_MS) {
+    espConnecting = false;
+    espConnResult = 2;
+    // Disable STA only. In AP_STA mode the AP stays up; an idle STA
+    // would keep scanning for the network and hop the shared radio
+    // off the AP channel.
+    WiFi.disconnect(true);
+    Serial.printf("[WIFI] connect to '%s' failed\n", espConnTarget);
+  } else {
+    return;
   }
-  return false;
+  drawStatusBar();
+  gfx->flush();
+  if (currentState == STATE_STATUS || currentState == STATE_AP_ACTIVE)
+    updateContentArea();
 }
 
 // -----------------------------------------------------------
 //  wifiDisconnect()
-//  Stops web server, mDNS, and disconnects STA.
+//  Disconnects STA. Stops web server + mDNS only when the AP is
+//  not running (the AP side still needs them).
 // -----------------------------------------------------------
 void wifiDisconnect() {
+  espConnecting = false;
   if (espConnected) {
-    webServerStop();   // stop server + wsServer + reset _webServerRunning
-    MDNS.end();
-    espConnected = false;
+    if (!apRunning) {
+      webServerStop();   // stop server + wsServer + reset _webServerRunning
+      MDNS.end();
+    }
+    espConnected  = false;
+    espActiveSlot = -1;
     strlcpy(espSSID, "---", sizeof(espSSID));
     strlcpy(espIP,   "---", sizeof(espIP));
   }
+  // disconnect(true) disables STA only: AP_STA -> AP, STA -> off.
   WiFi.disconnect(true);
 }
 

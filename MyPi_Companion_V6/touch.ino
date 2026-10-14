@@ -329,8 +329,7 @@ void kbOk() {
               true /*dhcp*/, "", "255.255.255.0", "", "");
   loadNvsProfiles();   // refresh in-memory cache
 
-  bool ok = wifiConnectSlot(freeSlot);
-  if (ok) espActiveSlot = freeSlot;
+  wifiConnectSlot(freeSlot);   // non-blocking; wifiService() finishes it
 
   drawStatusBar();
   gfx->flush();
@@ -625,8 +624,7 @@ void doSelect() {
         wifiScanStart();
       } else if (nvsProfiles[espMenuIndex].valid) {
         // Connect ESP to saved profile
-        bool ok = wifiConnectSlot(espMenuIndex);
-        if (ok) espActiveSlot = espMenuIndex;
+        wifiConnectSlot(espMenuIndex);   // non-blocking
         drawStatusBar();
         gfx->flush();
         currentState = STATE_STATUS;

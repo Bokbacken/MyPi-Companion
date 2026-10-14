@@ -119,15 +119,17 @@ void drawStatusBar() {
   gfx->setTextSize(2);
   if (espConnected) {
     drawCompactIP(espIP, 4, yEspIP, COL_ACTIVE);
+  } else if (espConnecting) {
+    drawTxt("joining..", 2, yEspIP, COL_ACCENT, COL_STATUS_BG);
   } else {
     drawTxt("no Wi-Fi", 2, yEspIP, COL_DIM, COL_STATUS_BG);
   }
 
   // ── ESP SSID (textSize 1) ─────────────────────────────────
   gfx->setTextSize(1);
-  if (espConnected) {
+  if (espConnected || espConnecting) {
     char ssBuf[29];
-    truncate(ssBuf, espSSID, 28);        // max 28 chars x 6 px = 168 px
+    truncate(ssBuf, espConnected ? espSSID : espConnTarget, 28);  // 28 x 6 px
     drawTxt(ssBuf, 4, yEspSSID, COL_DIM, COL_STATUS_BG);
   }
 

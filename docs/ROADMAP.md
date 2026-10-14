@@ -45,6 +45,16 @@ macro pool on FFat · base64-correct macros · `termFit()` · FFat file manageme
 - 4 editable AP profiles (name, SSID, password, subnet preset, NAT) — touch picker + `/ap-profiles`
 - NAT internet sharing via ESP32 NAPT (~6 Mbit/s), forced client DNS 1.1.1.1, `/api/apstatus`
 
+### v6.3 Pi system info + ESP web connect — implemented, hardware test pending
+- Daemon sends `STATUS:SYS:key=value|…` (hostname, model, OS, kernel, daemon version, uptime,
+  load, CPU temp, RAM, disk, throttle flags, Wi-Fi dBm, NTP). Key/value format: new fields
+  can be added without a protocol change; unknown keys are shown raw on `/info`
+- System Info on the touch screen has two pages (ESP / Pi); `/info` has a Raspberry Pi card
+- `/profiles` can connect the **ESP itself** (scan, SSID + password, or a saved slot);
+  previously only the Pi could be connected from the web
+- Non-blocking, AP-aware ESP STA connect: joining a network no longer kills a running AP
+  (AP on boot), stops the web server or freezes the UI
+
 ### Later v6 candidates
 RPC channel + daemon versioning · web login / PIN · robustness (connection limit, OTA
 rollback) · Pi system panel · Pi file manager · recipes + placeholders · web UI cleanup.
@@ -83,8 +93,8 @@ USB CDC ≈ 11 KB/s net — fine for config files, not for large binaries.
 `/services`: systemd units with status, start/stop/restart, journalctl output.
 
 ### 7. System monitor widget — low
-`CPU: 23%  RAM: 312/1024 MB  Temp: 48°C  Disk: 12.3/32 GB`, polled every 10 s.
-New message `STATUS:SYS:cpu:ram:temp:disk` (**daemon change**).
+**Partly done in v6.3:** `STATUS:SYS` delivers temp, RAM, disk, load (shown on System Info
+and `/info`). Remaining: CPU % and a compact widget on the dashboard / status bar.
 
 ---
 
@@ -93,7 +103,7 @@ New message `STATUS:SYS:cpu:ram:temp:disk` (**daemon change**).
 - Headless Pi install (Ctrl+Alt+T does not work without a desktop)
 - `CMD:ADDWIFI_FULL` — handle the Pi's confirmation (currently ignored)
 - QR code with `http://rigconsole.local` on the display
-- Extended Pi health (CPU temp, uptime) on `STATE_ADV_INFO`
+- ~~Extended Pi health (CPU temp, uptime) on `STATE_ADV_INFO`~~ — done in v6.3 (Pi page)
 - NVS profile export/import (`/api/nvsimport`)
 - Optional: put `uninstall.sh` on the RIGSETUP disk too
 

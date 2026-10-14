@@ -153,6 +153,12 @@ char  espIP[24]    = "---";
 bool  espConnected = false;
 int   espMenuIndex = 0;
 int   espActiveSlot = -1;   // NVS slot ESP is connected on (-1=none)
+bool  espConnecting     = false;  // non-blocking STA connect in progress
+int   espConnSlot       = -1;     // NVS slot being tried
+int   espConnResult     = 0;      // last attempt: 0 none, 1 ok, 2 failed
+char  espConnTarget[33] = "";     // SSID being tried / last tried
+volatile int  pendingEspConnect = -1;   // NVS slot to connect from web (-1 = none)
+volatile bool pendingEspDisconnect = false;
 
 // Pending Install-on-Pi request — set by web handler (HTTP task),
 // cleared + executed in loop() (Arduino task).
@@ -465,6 +471,23 @@ static void _loopBody() {
     pendingPiInstall = false;
     hidInstallOnPi();
   }
+
+  // ESP Wi-Fi connect / disconnect requested from web UI. Deferred so
+  // the HTTP response is sent before the radio changes mode.
+  if (pendingEspConnect >= 0) {
+    int slot = pendingEspConnect;
+    pendingEspConnect = -1;
+    wifiConnectSlot(slot);
+    drawStatusBar();
+    gfx->flush();
+  }
+  if (pendingEspDisconnect) {
+    pendingEspDisconnect = false;
+    wifiDisconnect();
+    drawStatusBar();
+    gfx->flush();
+  }
+  wifiService();   // completes a non-blocking STA connect
 
   // AP start requested from web UI (set by handleApiApStart)
   if (pendingApStart >= 0) {
