@@ -35,9 +35,17 @@ to the Pi gives it three roles at once:
 
 | USB role | What it does |
 |---|---|
-| **Serial (CDC-ACM, 115200 8N1)** | Talks to the `rig-console` daemon on the Pi (`/dev/ttyACM0`) |
+| **Serial (CDC-ACM)** | Talks to the `rig-console` daemon on the Pi (`/dev/ttyACM0`) |
 | **HID keyboard** | Types the installer command on the Pi during *Install on Pi* |
 | **Mass storage (MSC)** | Shows up as the `RIGSETUP` disk with the installer files, or shares the SD card |
+
+> **Note on the serial connection:** The firmware sets a baud rate of 115200 in the
+> `Serial.begin()` call, but between the ESP32-S3 and the Raspberry Pi this number has no
+> real effect. The link is USB CDC (a USB device class), not a physical UART. Data travels
+> over USB packets at full USB speed regardless of the configured baud rate. The 115200
+> figure only matters if you connect a PC directly to the ESP32-S3 over USB for debugging;
+> on the Pi side the OS driver (`/dev/ttyACM0`) accepts any baud rate the application
+> opens it with.
 
 The device also connects to Wi-Fi on its own (or starts its own access point) and runs a
 web server, so you can use all of its functions from a phone or laptop browser.
@@ -216,8 +224,10 @@ Home (status)
 
 ### Home
 
-The start screen shows **MyPi Companion**, the Pi link status and the serial speed
-(115200). Swipe right or tap the right zone to open the main menu.
+The start screen shows **MyPi Companion**, the Pi link status and the configured serial
+speed (115200 — the actual link is USB CDC so this is nominal; see the note in
+[section 1](#1-hardware-overview)). Swipe right or tap the right zone to open the main
+menu.
 
 ### Main Menu
 
