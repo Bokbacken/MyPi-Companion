@@ -1,6 +1,6 @@
 # MyPi-Companion — Project Status
 
-_Last updated: 2026-10-14 — current release: **v6.2** (tag `v6.2`); v6.3 in progress (see below)_
+_Last updated: 2026-10-14 — current release: **v6.2** (tag `v6.2`); v6.3 on `main` (v6.3.2), v6.3.3 in PR (see below)_
 
 > End-user documentation: [USER_GUIDE.md](USER_GUIDE.md).
 
@@ -191,6 +191,7 @@ STATE_AP_BOOT_SELECT — v6.2: pick which AP profile auto-starts on boot (or Non
 | Method | URL | Description |
 |---|---|---|
 | GET | `/` | Dashboard |
+| GET | `/index.html` | **v6.3:** alias for `/` (Chrome on Android may request it; all back links use it) |
 | GET | `/networks` | Pi networks page |
 | GET | `/installonpi` | Install-on-Pi page |
 | GET | `/info` | System info page |
@@ -221,6 +222,13 @@ STATE_AP_BOOT_SELECT — v6.2: pick which AP profile auto-starts on boot (or Non
 | GET | `/macros` | **v5:** GUI macro & menu editor |
 | GET | `/update` | OTA upload page |
 | POST | `/update` | Receive + flash firmware |
+| GET | `/api/otaprogress` | OTA write progress (display shows 5 % steps) |
+| GET | `/ap-profiles` | AP profile editor (2-column cards, 1 column on phones) |
+| GET | `/api/approfiles` | AP profiles JSON (passwords masked) |
+| POST | `/api/approfile/save` | Save one AP profile |
+| GET | `/api/approfile/getpass?slot=N` | **v6.3:** saved AP password for the eye/reveal button |
+| POST | `/api/apstart` | Start an AP profile |
+| GET | `/api/apstatus` | AP diagnostics: `clients`, **v6.3.3:** `maxClients`, `clientList[]` (`ip`, `dot`, `label`, `mac`, `host`, `hostSrc`, `vendor`), NAT state, `dhcpNamesSeen` |
 
 WebSocket on port 81 — terminal bridge (xterm.js ↔ Pi serial).
 
@@ -378,6 +386,10 @@ commit both. The script asserts: no FitAddon, `termFit` present, vertical QB pre
 - Arduino IDE concatenates `.ino` tabs alphabetically into one translation unit — no `extern` needed
 - `_webServerRunning` — modify only via `startWebServer()` / `webServerStop()`
 - Bitmaps are RGB565; black `0x0000` is the splash transparency key
+- softAP client limit: `AP_MAX_CLIENTS` = 8 (passed to `WiFi.softAP()`). The ESP-IDF driver allows ~10
+  stations, but the prebuilt lwIP DHCP server (`CONFIG_LWIP_DHCPS_MAX_STATION_NUM`) hands out only 8
+  leases, so a 9th client would associate without getting an IP. The Arduino default is 4
+  (used before v6.3.3). `CN_MAX` (name cache) must be ≥ `AP_MAX_CLIENTS` (static_assert)
 
 ## v5 status
 
@@ -420,16 +432,20 @@ commit both. The script asserts: no FitAddon, `termFit` present, vertical QB pre
 
 ## v6.3 — in progress (not yet tagged)
 
-`FW_VERSION "6.3"`, `DAEMON_VERSION "6.3"`. Build: ~56 % of the 3 MB app partition.
+`FW_VERSION "6.3.3"` (6.3.1 / 6.3.2 merged with PR #23 / #24; 6.3.3 in a new PR), `DAEMON_VERSION "6.3"`.
+Build: ~57 % of the 3 MB app partition.
 
 | Area | Change | PR | Hardware |
 |---|---|---|---|
 | International keyboard | `In` split into `I1` (Nordic + DE/NL, 21) and `I2` (FR/ES/PT/IT, 25); `€ £ ¥ ¤ §` added to `S2`; Windows-1252 internally, UTF-8 out; custom 5×8 glyphs for `ø Ø ð Ð þ Þ œ ý ã õ € ¤` | #22 (merged) | **verified** — glyphs legible |
-| Pi system info | Daemon sends `STATUS:SYS:k=v\|…` (host, model, OS, kernel, daemon, uptime, temp, load, RAM, disk, power/throttle, Wi-Fi dBm, NTP); touch System Info has ESP / Pi pages; `/info` Raspberry Pi card; `/api/info` `pi_sys` | #23 | **verified** (new daemon installed) |
-| ESP web connect | `/profiles` ESP32 card + per-slot **ESP** / **Pi** buttons; `/api/espconnect`, `/api/espstatus`, `/api/espscan`, `/api/espdisconnect` | #23 | **verified** — connect works, performance unchanged |
-| AP client names | `client_names.ino`: per-client host name from (1) Pi IP match + `STATUS:SYS` host, (2) unicast mDNS reverse PTR to client:5353 from port 5354 (legacy unicast), (3) NetBIOS NBSTAT to client:137, plus (DHCP) option 12 / option 81 FQDN sniffed from client DHCP requests by a wrapper around the AP lwIP netif `input` (re-hooked if the netif is recreated; priority Pi → DHCP → mDNS → NetBIOS); non-blocking, one lookup per 2 s scan, back-off 0/2/5/15/60 s then 5 min. ESP-IDF DHCP server does not keep option 12, hence the sniffer. `/api/apstatus` adds `dhcpNamesSeen` (diagnostic counter). `clientList[]` adds `host`, `hostSrc` (`pi`/`dhcp`/`mdns`/`netbios`), `vendor`; `label` = host ‖ vendor ‖ MAC tail. Host-tested against Avahi and Samba nmbd and with synthetic DHCP frames, ASan fuzzed | #24 | Pi name confirmed on hardware; DHCP names not yet tested |
-| Toast channel | Central action-feedback overlay (`toastInfo` / `toastError` / `toastSet`, `TOAST_Y`/`TOAST_H`); `ERR:CONNECT`, `ERR:ADDWIFI`, `OK:`/`ERR:ADDWIFI_FULL`, NVS → Pi "Lägger till WiFi..." and install DONE/ERR now use it instead of `drawHomeContent()` / status-bar `hasInfo` | #24 | not yet tested |
-| AP-aware STA | Non-blocking `wifiConnectSlot()` + `wifiService()`; `WIFI_AP_STA` while the AP runs; `wifiDisconnect()` keeps web/mDNS when the AP runs; web routes registered once | #23 | long-run soak test in progress |
+| Pi system info | Daemon sends `STATUS:SYS:k=v\|…` (host, model, OS, kernel, daemon, uptime, temp, load, RAM, disk, power/throttle, Wi-Fi dBm, NTP); touch System Info has ESP / Pi pages; `/info` Raspberry Pi card; `/api/info` `pi_sys` | #23 (merged) | **verified** (new daemon installed) |
+| ESP web connect | `/profiles` ESP32 card + per-slot **ESP** / **Pi** buttons; `/api/espconnect`, `/api/espstatus`, `/api/espscan`, `/api/espdisconnect` | #23 (merged) | **verified** — connect works, performance unchanged |
+| AP client names | `client_names.ino`: per-client host name from (1) Pi IP match + `STATUS:SYS` host, (2) unicast mDNS reverse PTR to client:5353 from port 5354 (legacy unicast), (3) NetBIOS NBSTAT to client:137, plus (DHCP) option 12 / option 81 FQDN sniffed from client DHCP requests by a wrapper around the AP lwIP netif `input` (re-hooked if the netif is recreated; priority Pi → DHCP → mDNS → NetBIOS); non-blocking, one lookup per 2 s scan, back-off 0/2/5/15/60 s then 5 min. ESP-IDF DHCP server does not keep option 12, hence the sniffer. `/api/apstatus` adds `dhcpNamesSeen` (diagnostic counter). `clientList[]` adds `host`, `hostSrc` (`pi`/`dhcp`/`mdns`/`netbios`), `vendor`; `label` = host ‖ vendor ‖ MAC tail. Host-tested against Avahi and Samba nmbd and with synthetic DHCP frames, ASan fuzzed | #24 (merged) | **verified** — 4 clients (phone, tablet, laptop, Pi) all show names |
+| Toast channel | Central action-feedback overlay (`toastInfo` / `toastError` / `toastSet`, `TOAST_Y`/`TOAST_H`); `ERR:CONNECT`, `ERR:ADDWIFI`, `OK:`/`ERR:ADDWIFI_FULL`, NVS → Pi "Lägger till WiFi..." and install DONE/ERR now use it instead of `drawHomeContent()` / status-bar `hasInfo`; `hidSetStatus()` install steps also use it | #24 (merged) | **verified** (incl. install toasts during Pi reinstall) |
+| AP-aware STA | Non-blocking `wifiConnectSlot()` + `wifiService()`; `WIFI_AP_STA` while the AP runs; `wifiDisconnect()` keeps web/mDNS when the AP runs; web routes registered once | #23 (merged) | long-run soak test in progress (~1 h uptime so far, no issues) |
+| OTA progress | Web: XHR upload % then indeterminate *Flashing, please wait...* bar; display: progress redrawn in 5 % steps (flash 3–4× faster than per-chunk redraw) | #23/#24 (merged) | **verified** |
+| AP web editor | 2-column cards (1 on phones); reveal button fixed via `/api/approfile/getpass`; `/index.html` alias + back links (Chrome-on-Android workaround) | #24 (merged) | **verified** |
+| AP client limit | `AP_MAX_CLIENTS 8` passed to `WiFi.softAP()` (was library default 4); touch AP screen `Clients (n/8):`, 4 rows or 3 + `+N more (web)`; web diag `n/8 client(s)` + `(full)`; `/api/apstatus` `maxClients`; docs updated | v6.3.3 PR (#25) | **verified** with 5 clients (all named); 8/8 + `(full)` not yet tested |
 
 ## v6.2 — released 2026-10-14
 

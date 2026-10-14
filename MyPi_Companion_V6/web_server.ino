@@ -1243,7 +1243,7 @@ void startAP(int profileSlot) {
   _natWanted = prof.nat;
   _natDns = prof.nat ? IPAddress(1, 1, 1, 1) : IPAddress((uint32_t)0);
   WiFi.softAPConfig(dynApIp, dynApGw, dynApSn, IPAddress((uint32_t)0), _natDns);
-  WiFi.softAP(prof.ssid, prof.pass, apChannel);
+  WiFi.softAP(prof.ssid, prof.pass, apChannel, 0 /*ssid_hidden*/, AP_MAX_CLIENTS);
   // 20 MHz AP: more robust on crowded 2.4 GHz (hotels, offices) and
   // avoids HT40 secondary-channel conflicts with the STA uplink.
   WiFi.softAPbandwidth(WIFI_BW_HT20);
@@ -1296,6 +1296,7 @@ void handleApiApStatus() {
   j += ",\"profile\":"   + String(activeApProfile + 1);
   j += ",\"apIp\":\""    + WiFi.softAPIP().toString() + "\"";
   j += ",\"clients\":"   + String((int)WiFi.softAPgetStationNum());
+  j += ",\"maxClients\":" + String(AP_MAX_CLIENTS);
   // Per-client list: MAC from the Wi-Fi driver, IP from the DHCP server
   j += ",\"clientList\":[";
   if (apRunning) {

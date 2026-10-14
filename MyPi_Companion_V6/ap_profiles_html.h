@@ -187,7 +187,7 @@ async function loadStatus(test){
     var r=await fetch('/api/apstatus'+(test?'?test=1':''));
     var d=await r.json();
     var rows=[
-      ['AP',d.apActive?'profile '+d.profile+' \u2014 '+d.apIp+' \u2014 '+d.clients+' client(s)':'not running'],
+      ['AP',d.apActive?'profile '+d.profile+' \u2014 '+d.apIp+' \u2014 '+d.clients+(d.maxClients?'/'+d.maxClients:'')+' client(s)'+(d.maxClients&&d.clients>=d.maxClients?' (full)':''):'not running'],
       ['NAT','<span class="'+cls(d.natActive||!d.natWanted)+'">'+esc(d.natStatus)+'</span>'],
       ['Client DNS',d.clientDns],
       ['Uplink (STA)',d.staConnected?'<span class="ok">'+esc(d.staSsid)+'</span> '+d.staIp+' ('+d.staRssi+' dBm)':'<span class="bad">not connected</span>'],

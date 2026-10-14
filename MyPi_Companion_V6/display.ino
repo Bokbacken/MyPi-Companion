@@ -1112,10 +1112,11 @@ void drawApActiveContent() {
     int num = wsl.num;
 
     char hdr[24];
-    snprintf(hdr, sizeof(hdr), "Clients (%d):", num);
+    snprintf(hdr, sizeof(hdr), "Clients (%d/%d):", num, AP_MAX_CLIENTS);
     drawTxt(hdr, 4, y, COL_DIM, COL_BG);  y += R;
 
-    int show = num < 4 ? num : 4;      // screen space: max 4 rows
+    // Screen space: 4 rows. With more than 4 clients show 3 + "+N more".
+    int show = num <= 4 ? num : 3;
     for (int i = 0; i < show; i++) {
       const uint8_t *mac = wsl.sta[i].mac;
       char ipStr[6] = ".?";
@@ -1134,6 +1135,11 @@ void drawApActiveContent() {
                  ipStr, mac[3], mac[4], mac[5]);
       }
       drawTxt(line, 4, y, COL_TEXT, COL_BG);  y += R;
+    }
+    if (num > show) {
+      char more[24];
+      snprintf(more, sizeof(more), "+%d more (web)", num - show);
+      drawTxt(more, 4, y, COL_DIM, COL_BG);  y += R;
     }
     if (num == 0) {
       drawTxt("(none)", 4, y, COL_DIM, COL_BG);  y += R;
