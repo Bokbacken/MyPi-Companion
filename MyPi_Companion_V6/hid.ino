@@ -494,6 +494,7 @@ void hidInstallOnPi() {
         else if (rxLine == "RIG:INSTALL_DONE") {
           hidSetStatus(0, "Done!",         COL_ACTIVE);
           hidSetStatus(1, "Connecting...", COL_DIM);
+          toastInfo("Install DONE");
           // CLI: unmount our manual mount and log out (typed ahead).
           if (cli) hidCliCleanup(mounted, weLoggedIn);
           hidWipePass();
@@ -519,6 +520,7 @@ void hidInstallOnPi() {
           snprintf(errBuf, sizeof(errBuf), "%.20s", rxLine.c_str() + 4);
           hidSetStatus(0, "ERR: install", COL_ERR);
           hidSetStatus(1, errBuf,         COL_ERR);
+          toastError("Install failed");
           if (cli) hidCliCleanup(mounted, weLoggedIn);
           hidWipePass();
           mscEject();

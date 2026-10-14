@@ -152,15 +152,11 @@ void drawStatusBar() {
              piIfaces[idx].name, piIfaces[idx].ip);
     drawTxt(piBuf, 4, yPiIface, COL_ACTIVE, COL_STATUS_BG);
 
-    // SSID line: error > info > SSID for wireless iface
+    // SSID line: error > SSID for wireless iface
     if (hasError) {
       char errBuf[29];
       truncate(errBuf, lastErrMsg, 28);
       drawTxt(errBuf, 4, yPiSSID, COL_ERR, COL_STATUS_BG);
-    } else if (hasInfo) {
-      char infoBuf[29];
-      truncate(infoBuf, infoMsg, 28);
-      drawTxt(infoBuf, 4, yPiSSID, COL_ACCENT, COL_STATUS_BG);
     } else if (strncmp(piIfaces[idx].name, "wl", 2) == 0) {
       char ssBuf[29];
       truncate(ssBuf, activeSSID, 28);
@@ -177,10 +173,6 @@ void drawStatusBar() {
       char errBuf[29];
       truncate(errBuf, lastErrMsg, 28);
       drawTxt(errBuf, 4, yPiSSID, COL_ERR, COL_STATUS_BG);
-    } else if (hasInfo) {
-      char infoBuf[29];
-      truncate(infoBuf, infoMsg, 28);
-      drawTxt(infoBuf, 4, yPiSSID, COL_ACCENT, COL_STATUS_BG);
     } else {
       char ipBuf[29];
       truncate(ipBuf, activeIP, 28);
@@ -1186,5 +1178,87 @@ void drawOtaScreen(int pct) {
 void drawOtaError(const char *msg) {
   gfx->setTextSize(1);
   drawCentredTxt(msg, SCREEN_W / 2, SCREEN_H / 2 + 48, COL_ERR, COL_BG);
+  gfx->flush();
+}
+
+// ============================================================
+//  TOAST OVERLAY — transient action feedback
+// ============================================================
+//  A 14-pixel bar at the bottom of the content area (y=TOAST_Y).
+//  It draws over whatever content is currently there; when the TTL
+//  expires toastTick() fills it with COL_BG and the next natural
+//  redraw (state change, STATUS:SYS poll, user tap) restores it.
+//
+//  ┌─────────────────────────────────────────────┐
+//  │  Header (y 0-19)                            │
+//  │  Content area  (y 20-235)                   │
+//  │                                             │
+//  │  ┌─────────────────────────────────────┐    │
+//  │  │  Toast bar (y 221-234, TOAST_H=14)  │    │  ← this section
+//  │  └─────────────────────────────────────┘    │
+//  │  Status bar (y 236-299)                     │
+//  │  Touch bar  (y 300-319)                     │
+//  └─────────────────────────────────────────────┘
+//
+//  ── RULES FOR ALL FUTURE CODE ───────────────────────────────
+//
+//  1. Use toastInfo()  for confirmations / success feedback:
+//       "AP started", "Tillagd: MyNet", "Install DONE", ...
+//  2. Use toastError() for failures / ERR: daemon replies:
+//       "ERR: install", "Failed: MyNet", ...
+//  3. Use toastSet()   when you need a custom colour or TTL.
+//     A newer toast always replaces the current one, so a pending
+//     toast ("Lägger till WiFi...", 30 s) is simply overwritten
+//     by the OK/ERR toast when the reply arrives.
+//  4. NEVER call drawHomeContent() / drawApActiveContent() etc.
+//     from protocol.ino, web_server.ino or hid.ino to deliver
+//     a message — those functions redraw an entire page and
+//     produce visual garbage when the display is on another state.
+//  5. The status bar (drawStatusBar) is for CONNECTIVITY STATE
+//     only (ESP IP/SSID, Pi IP/SSID). hasError / lastErrMsg
+//     shows the last daemon error on the Pi SSID line; transient
+//     "pending / done" text belongs in the toast, not there.
+// ============================================================
+
+static char      _toastBuf[32]  = "";
+static uint16_t  _toastFg       = 0;
+static uint32_t  _toastExpireMs = 0;
+static bool      _toastActive   = false;
+static bool      _toastForever  = false;
+
+// Core function. col = text colour; background is always COL_STATUS_BG.
+// Pass ttlMs=0 for a permanent toast (cleared only by the next call).
+void toastSet(const char *text, uint32_t ttlMs, uint16_t col) {
+  strlcpy(_toastBuf, text, sizeof(_toastBuf));
+  _toastFg       = col;
+  _toastExpireMs = millis() + ttlMs;
+  _toastForever  = (ttlMs == 0);
+  _toastActive   = true;
+  toastRedraw();
+  gfx->flush();
+}
+
+// Re-paint an active toast on top of freshly drawn content. Called by
+// updateContentArea() so a page change does not wipe a live toast.
+// Does not flush — the caller flushes.
+void toastRedraw() {
+  if (!_toastActive) return;
+  gfx->fillRect(0, TOAST_Y, SCREEN_W, TOAST_H, COL_STATUS_BG);
+  char buf[29]; truncate(buf, _toastBuf, 28);
+  drawTxt(buf, 4, TOAST_Y + 3, _toastFg, COL_STATUS_BG);
+}
+
+// Preferred wrappers — use these everywhere.
+//   toastInfo  : accent colour, 5 s.  Confirmations, "started", "added".
+//   toastError : error colour,  8 s.  ERR: replies, failed actions.
+void toastInfo (const char *text) { toastSet(text, 5000UL, COL_ACCENT); }
+void toastError(const char *text) { toastSet(text, 8000UL, COL_ERR);    }
+
+// Call once per loop(). Clears the bar when the TTL has expired.
+void toastTick() {
+  if (!_toastActive || _toastForever) return;
+  if ((int32_t)(millis() - _toastExpireMs) < 0) return;
+  _toastActive = false;
+  gfx->fillRect(0, TOAST_Y, SCREEN_W, TOAST_H, COL_BG);
   gfx->flush();
 }

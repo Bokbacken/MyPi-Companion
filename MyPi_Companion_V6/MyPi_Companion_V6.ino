@@ -118,9 +118,6 @@ char  activeIP[24]                = "---";
 bool  piConnected                 = false;
 char  lastErrMsg[64]              = "";
 bool  hasError                    = false;
-char  infoMsg[64]                 = "";     // transient status (status bar line 3)
-bool  hasInfo                     = false;
-unsigned long infoExpireMs        = 0;      // millis() when infoMsg is cleared
 
 // Pi active network interfaces (received via STATUS:IFACES:)
 PiIface piIfaces[MAX_PI_IFACES];
@@ -530,12 +527,8 @@ static void _loopBody() {
     gfx->flush();
   }
 
-  // Expire transient info message (e.g. "Tillagd: <ssid>") → back to Pi IP
-  if (hasInfo && (long)(now - infoExpireMs) >= 0) {
-    hasInfo = false;
-    drawStatusBar();
-    gfx->flush();
-  }
+  // Clear the toast overlay when its TTL has expired (see display.ino)
+  toastTick();
 
   // Scroll through Pi interfaces every IFACE_SCROLL_MS
   if (piIfaceCount > 1 && (now - lastIfaceScrollMs) >= IFACE_SCROLL_MS) {
