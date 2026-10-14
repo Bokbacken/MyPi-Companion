@@ -1,6 +1,6 @@
 # MyPi Companion — User Guide
 
-_Firmware v6.2 · October 2026_
+_Firmware v6.3.3 · October 2026_
 
 MyPi Companion is a small touch-screen device that plugs into a Raspberry Pi over USB.
 You can use it to see and change the Pi's network setup, open a terminal on the Pi from a
@@ -111,6 +111,12 @@ The screen is split into four fixed horizontal zones:
 | Status bar | 236–299 | 64 px | Network status, always visible (dark background) |
 | Touch bar | 300–319 | 20 px | Labels of the tap zones |
 
+**Messages (toasts).** Short confirmations and errors appear as a one-line message at
+the bottom of the content area (y = 221–234), just above the status bar. Orange text is
+information (shown for 5 s), red text is an error (shown for 8 s). A new message replaces
+the old one, and a message stays visible when you change screen. During *Install on Pi*
+each install step is shown here until the next step replaces it.
+
 ---
 
 ## 4. Status bar
@@ -134,10 +140,12 @@ shown.
 
 **The bottom row (+55)** shows the first of these that applies:
 
-1. A **red error message**, e.g. a failed connect
-2. An **orange info message**, e.g. a confirmation of an action
-3. The **Pi SSID**, when the interface shown in the row above is wireless (`wl…`)
-4. Blank for wired interfaces
+1. A **red error message** from the Pi, e.g. a failed connect
+2. The **Pi SSID**, when the interface shown in the row above is wireless (`wl…`)
+3. Blank for wired interfaces
+
+Confirmations no longer appear here; since v6.3 they are shown as toasts (see
+[section 3](#3-display-layout)).
 
 When the Pi is offline the bottom row reads `Connect Pi via USB`.
 
@@ -280,7 +288,10 @@ the **Start on boot** checkbox on `/ap-profiles`.
 ### AP active
 
 Shown while the access point is running. It displays the AP SSID, password, the IP of
-the web interface, NAT status and the connected clients (up to 4 rows). **Tap left or swipe
+the web interface, NAT status and the connected clients. The list header shows the
+count and the limit, e.g. `Clients (4/8):`. There is room for 4 rows; with more than 4
+clients the screen shows 3 and a `+N more (web)` row, and `/ap-profiles` lists them all
+(see [Client limit](#client-limit)). **Tap left or swipe
 left to stop the AP.** Tap the header to hide the page; the AP keeps running (see
 [section 9](#hiding-and-showing-the-ap-page)).
 
@@ -399,7 +410,8 @@ entered on the touch screen works the same as one entered on the web.
 The web server runs whenever the ESP has a network, both on Wi-Fi (STA) and in AP mode.
 Open one of these:
 
-- `http://<ESP IP>/`, using the large IP shown in the status bar
+- `http://<ESP IP>/` (or `http://<ESP IP>/index.html`, same page), using the large IP
+  shown in the status bar
 - `http://rigconsole.local/` (mDNS)
 - In AP mode: `http://192.168.4.1/` (or the `.1` address of the subnet set in the AP
   profile)
@@ -424,7 +436,7 @@ Open one of these:
 | `/terminal` | xterm.js terminal on the Pi's bash. Each browser tab gets its own session (up to 4); command history is shared between tabs (Ctrl+Up/Down) |
 | `/macros` | Manage terminal macros and quick-action buttons |
 | `/storage` | File manager for internal flash and the SD card |
-| `/ap-profiles` | Edit the 4 AP profiles (name, SSID, password, subnet, NAT, start on boot, hide on boot). The status table lists each connected AP client with the last IP octet (e.g. `.2`), the manufacturer when known (Raspberry Pi, Apple, …) or the end of its MAC, and the full MAC. A host name, when found, replaces the manufacturer (which moves into brackets); hover the MAC to see how the name was found |
+| `/ap-profiles` | Edit the 4 AP profiles (name, SSID, password, subnet, NAT, start on boot, hide on boot). The cards are shown two per row (one per row on a phone). A saved password shows as dots; the eye button shows the real password. The status table shows the client count against the limit (e.g. `4/8 client(s)`, `(full)` at the limit) and lists each connected AP client with the last IP octet (e.g. `.2`), the manufacturer when known (Raspberry Pi, Apple, …) or the end of its MAC, and the full MAC. A host name, when found, replaces the manufacturer (which moves into brackets); hover the MAC to see how the name was found |
 | `/update` | OTA firmware update |
 
 ### API endpoints (for scripts)
@@ -499,6 +511,19 @@ then shows a small AP icon, left of the MyPi logo, with an orange **`+`** next t
 when NAT is on. Tap the header again to go back to the *AP active* page. Header taps are
 ignored on the keyboard screen, so a half-typed password is never lost.
 
+### Client limit
+
+The AP accepts at most **8 clients** at a time (phones, laptops, tablets and the Pi all
+count). A 9th device is refused when it tries to join and keeps trying, or uses another
+network. Disconnect a device you no longer need to make room.
+
+Why 8: the ESP32 Wi-Fi driver itself can serve about 10 stations, but the DHCP server in
+the ESP32 core keeps track of at most 8, so a 9th or 10th device would join without
+getting an IP address. Firmware older than v6.3.3 used the library default of **4**.
+
+All clients share the ESP's single radio. With NAT on they also share the few Mbit/s of
+software NAT, so many busy clients make every client slower.
+
 ### NAT / internet sharing
 
 With NAT on, the ESP routes AP clients through its own Wi-Fi uplink (NAPT).
@@ -527,7 +552,8 @@ For Raspberry Pi OS with a desktop and a logged-in user.
 
 1. The Companion presses **Ctrl+Alt+T** to open a terminal window.
 2. It types the install command, which runs `install.sh` from the `RIGSETUP` disk.
-3. Progress appears on the display and on `/installonpi`.
+3. Progress appears on `/installonpi` and as a message line on the display (each step
+   replaces the previous one, then a final done or error message).
 4. When the installer reports `RIG:INSTALL_DONE`, the Companion ejects the disk, waits
    3 seconds and sends `HELLO`. The Pi row then turns green with no reboot needed.
 
@@ -576,8 +602,10 @@ The mode, keyboard layout and username are saved (NVS `rigcfg`). The password is
 1. Get `MyPi_Companion_V6.ino.bin` from the CI build artifacts or from your own build.
 2. Open `http://<ESP IP>/update`.
 3. Drag and drop the `.ino.bin` file (or choose it) and start the upload.
-4. The display shows a full-screen progress bar. The device restarts by itself when the
-   update is done.
+4. The web page shows the upload progress in percent. When the upload is complete the bar
+   switches to a moving bar with *Flashing, please wait...* while the ESP finishes writing and restarts.
+   The display shows a full-screen progress bar at the same time. The device restarts by
+   itself when the update is done; reload the page after about 10 seconds.
 5. Check the new version on `/info` or **Advanced → Show info**.
 
 OTA replaces only the application. Changes to the partition table need a USB flash from
@@ -706,4 +734,6 @@ commands you type yourself are stored.
 | The wrong AP profile starts at boot | Another profile has **Start on boot** | Check **Advanced → Boot AP**, or the checkboxes on `/ap-profiles` |
 | Typed install command looks garbled | Keyboard layout detection failed | Run the install again. Make sure the console or terminal has focus |
 | Slow internet through the AP | Software NAT on the ESP32 | Expected (a few Mbit/s). Connect directly to the uplink for large transfers |
+| A device cannot join the AP, other devices are fine | The AP already has 8 clients (`8/8` on the AP screen, `(full)` on `/ap-profiles`) | Disconnect a device you do not need. See [Client limit](#client-limit) |
+| Chrome on a phone says *This site can't be reached* for `http://192.168.4.1/`, but other pages and other browsers work | Old browser data for that address, for example from another router that used the same IP. Clearing cookies and history did not always help in testing | Open `http://192.168.4.1/index.html` instead. All *back* links on the web pages go to `/index.html` |
 | `rigconsole.local` does not resolve | mDNS is not supported on the client (some Android versions, some networks) | Use the IP shown in the status bar |

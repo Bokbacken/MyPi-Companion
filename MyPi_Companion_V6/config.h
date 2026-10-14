@@ -9,7 +9,7 @@
 // -----------------------------------------------------------
 //  Firmware version
 // -----------------------------------------------------------
-#define FW_VERSION    "6.3.2"
+#define FW_VERSION    "6.3.3"
 // __DATE__ = "Oct 13 2026" (compiler-injected, MMM DD YYYY)
 // Reformatted to "DD Mon YYYY" at runtime (see display.ino / web_server.ino)
 
@@ -191,8 +191,16 @@ struct PiIface {
   char ip[16];                      // e.g. "192.168.1.5"
 };
 
+// AP station limit passed to WiFi.softAP() (the Arduino default is 4).
+// The ESP-IDF DHCP server tracks at most CONFIG_LWIP_DHCPS_MAX_STATION_NUM
+// (8 in the prebuilt core libs) leases, so going above 8 gives clients
+// that associate but never get an IP. The lease pool itself is 11 addresses
+// right after the AP IP (Arduino NetworkInterface default).
+#define AP_MAX_CLIENTS 8
+
 // AP client host-name cache (client_names.ino)
-#define CN_MAX       10             // AP max clients
+#define CN_MAX       10             // name-cache slots (>= AP_MAX_CLIENTS)
+static_assert(CN_MAX >= AP_MAX_CLIENTS, "CN_MAX must cover AP_MAX_CLIENTS");
 #define CN_NAME_LEN  24
 enum { CN_SRC_NONE = 0, CN_SRC_PI, CN_SRC_MDNS, CN_SRC_NBNS, CN_SRC_DHCP };
 struct ClientName {

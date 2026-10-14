@@ -45,7 +45,7 @@ macro pool on FFat · base64-correct macros · `termFit()` · FFat file manageme
 - 4 editable AP profiles (name, SSID, password, subnet preset, NAT) — touch picker + `/ap-profiles`
 - NAT internet sharing via ESP32 NAPT (~6 Mbit/s), forced client DNS 1.1.1.1, `/api/apstatus`
 
-### v6.3 Pi system info + ESP web connect — implemented, hardware test pending
+### v6.3 Pi system info + ESP web connect — hardware-tested (AP-aware STA soak test pending)
 - Daemon sends `STATUS:SYS:key=value|…` (hostname, model, OS, kernel, daemon version, uptime,
   load, CPU temp, RAM, disk, throttle flags, Wi-Fi dBm, NTP). Key/value format: new fields
   can be added without a protocol change; unknown keys are shown raw on `/info`
@@ -54,6 +54,9 @@ macro pool on FFat · base64-correct macros · `termFit()` · FFat file manageme
   previously only the Pi could be connected from the web
 - Non-blocking, AP-aware ESP STA connect: joining a network no longer kills a running AP
   (AP on boot), stops the web server or freezes the UI
+- AP client host names (Pi / DHCP option 12 / mDNS / NetBIOS), toast channel for all action
+  feedback, faster OTA (5 % display steps) with a web *Flashing* phase
+- v6.3.3: explicit AP client limit of 8 (`AP_MAX_CLIENTS`; DHCP server limit), shown as `n/8`
 
 ### Later v6 candidates
 RPC channel + daemon versioning · web login / PIN · robustness (connection limit, OTA
