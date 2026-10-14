@@ -9,7 +9,7 @@
 // -----------------------------------------------------------
 //  Firmware version
 // -----------------------------------------------------------
-#define FW_VERSION    "6.3.1"
+#define FW_VERSION    "6.3.2"
 // __DATE__ = "Oct 13 2026" (compiler-injected, MMM DD YYYY)
 // Reformatted to "DD Mon YYYY" at runtime (see display.ino / web_server.ino)
 
