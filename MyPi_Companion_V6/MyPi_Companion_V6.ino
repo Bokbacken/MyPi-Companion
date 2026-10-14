@@ -162,15 +162,23 @@ char    piPass[65]    = "";
 int8_t  piLayoutForce = -1;
 
 // -----------------------------------------------------------
-//  KB ranges — 6 character groups (visible to all .ino files)
+//  KB ranges — 7 character groups (visible to all .ino files)
+//  Non-ASCII bytes are Windows-1252 (= Latin-1 plus € 0x80, œ 0x9C);
+//  kbOk() converts to UTF-8, display.ino maps them to CP437 / custom glyphs.
 // -----------------------------------------------------------
 const char * const KB_RANGES[KB_RANGE_COUNT] = {
   "abcdefghijklmnopqrstuvwxyz",
   "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
   " 0123456789",                 // 09: space first, then digits
   "!#@$%&*-_+=.,?:;/",           // S1: common password symbols
-  "\"'()[]\\{}^~|<>`",             // S2: structural / rare symbols (no overlap with S1)
-  "\xe5\xe4\xf6\xc5\xc4\xd6\xe9\xe8\xea\xeb\xe0\xe2\xe7\xfc\xfb\xf9\xfa\xee\xef\xf4"
+  "\"'()[]\\{}^~|<>`"            // S2: structural / rare symbols (no overlap with S1)
+  "\x80\xa3\xa5\xa4\xa7",        //     + currency/section: € £ ¥ ¤ §
+  // I1: Nordic + German/Dutch — å ä ö æ ø ü ë ï é ß ð þ Å Ä Ö Æ Ø Ü É Ð Þ
+  "\xe5\xe4\xf6\xe6\xf8\xfc\xeb\xef\xe9\xdf\xf0\xfe"
+  "\xc5\xc4\xd6\xc6\xd8\xdc\xc9\xd0\xde",
+  // I2: French/Spanish/Portuguese/Italian — à â ç è ê î ô û ù ÿ œ á í ó ú ý ñ ã õ ì ò Ç Ñ ¿ ¡
+  "\xe0\xe2\xe7\xe8\xea\xee\xf4\xfb\xf9\xff\x9c\xe1\xed\xf3\xfa\xfd\xf1\xe3\xf5\xec\xf2"
+  "\xc7\xd1\xbf\xa1"
 };
 
 int  kbRangeIdx = 0;

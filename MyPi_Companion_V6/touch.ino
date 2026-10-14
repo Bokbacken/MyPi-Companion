@@ -262,10 +262,10 @@ void kbDel() {
 // Confirm text entry. KB_MODE_WIFI: save SSID+pass to NVS, connect, go to
 // STATUS. KB_MODE_INSTALL_USER/PASS: collect Pi login, then CLI install.
 void kbOk() {
-  // Convert Latin-1 (KB "In" range) → UTF-8 before use (WPA2 passphrases
-  // and the Pi login are UTF-8). Never splits a 2-byte sequence on truncation.
+  // Convert Windows-1252 (KB I1/I2/S2 ranges) → UTF-8 before use (WPA2
+  // passphrases and the Pi login are UTF-8). Never splits a sequence on truncation.
   {
-    char utf8pass[130] = "";  // worst case: 64 Latin-1 bytes → 128 UTF-8 bytes
+    char utf8pass[200] = "";  // worst case: 64 bytes × 3 (€) = 192 UTF-8 bytes
     const int maxOut = (int)sizeof(kbPass) - 1;
     int  di = 0;
     for (int i = 0; i < kbPassLen; i++) {
@@ -273,6 +273,12 @@ void kbOk() {
       if (c < 0x80) {
         if (di + 1 > maxOut) break;
         utf8pass[di++] = (char)c;
+      } else if (c == 0x80) {             // € U+20AC
+        if (di + 3 > maxOut) break;
+        utf8pass[di++] = (char)0xE2; utf8pass[di++] = (char)0x82; utf8pass[di++] = (char)0xAC;
+      } else if (c == 0x9C) {             // œ U+0153
+        if (di + 2 > maxOut) break;
+        utf8pass[di++] = (char)0xC5; utf8pass[di++] = (char)0x93;
       } else {
         // Latin-1 0x80..0xBF → 0xC2 xx, 0xC0..0xFF → 0xC3 xx
         if (di + 2 > maxOut) break;
