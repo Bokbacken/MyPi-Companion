@@ -502,12 +502,10 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 </div>
 <footer><a href="/" style="color:#484f58">MyPi Companion</a></footer>
 <script>
-// OTA upload progress driven by XHR upload events.
-// Rationale: the ESP32 sync WebServer is blocked during the multipart POST and
-// cannot answer /api/otaprogress GET requests while writing chunks to flash.
-// XHR upload.onprogress fires independently of server responses; since the ESP32
-// writes to flash on each received chunk, upload bytes ~= flash bytes => accurate
-// progress without polling.  /api/otaprogress is retained on the server for debug.
+// OTA: upload progress -> indeterminate wait -> done/error.
+// xhr.upload.onprogress tracks browser->ESP data transfer (fast on local WiFi).
+// When upload is complete (onloadend), switch to indeterminate <progress> while
+// the ESP verifies the image CRC and sends the HTTP response.
 document.getElementById('upf').onsubmit=function(e){
   e.preventDefault();
   var f=document.getElementById('fw').files[0];
@@ -521,12 +519,14 @@ document.getElementById('upf').onsubmit=function(e){
   bar.value=0;pct.textContent='Uploading...';
 
   function showOk(){
+    bar.value=100;
     document.getElementById('upbtn').disabled=false;
     res.style.display='block';res.className='result ok';
     res.textContent='Flash successful! Device is rebooting...';
-    bar.value=100;pct.textContent='Done!';
+    pct.textContent='Done!';
   }
   function showErr(msg){
+    bar.value=0;
     document.getElementById('upbtn').disabled=false;
     res.style.display='block';res.className='result err';
     res.textContent=msg;
@@ -534,11 +534,16 @@ document.getElementById('upf').onsubmit=function(e){
 
   var xhr=new XMLHttpRequest();
   xhr.upload.onprogress=function(ev){
-    if(ev.lengthComputable){
+    if(ev.lengthComputable&&ev.loaded<ev.total){
       var p=Math.round(ev.loaded/ev.total*100);
       bar.value=p;
-      pct.textContent=p<100?'Flashing: '+p+'%':'Verifying...';
+      pct.textContent='Uploading: '+p+'%';
     }
+  };
+  xhr.upload.onloadend=function(){
+    // Upload done — ESP is writing/verifying flash. Show indeterminate bar.
+    bar.removeAttribute('value');
+    pct.textContent='Flashing, please wait...';
   };
   xhr.onload=function(){
     if(xhr.status===200){showOk();}
