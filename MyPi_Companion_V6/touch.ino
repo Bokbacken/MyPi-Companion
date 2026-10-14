@@ -27,6 +27,7 @@
 //
 //  STATE_ADV_INFO dispatch:
 //    TAP_LEFT or SWIPE_LEFT → goBack()
+//    TAP_RIGHT / SWIPE_RIGHT / SWIPE_UP / SWIPE_DOWN → toggle ESP32 / Pi page
 //
 //  STATE_AP_ACTIVE dispatch:
 //    TAP_LEFT or SWIPE_LEFT → stopAP() → STATE_STATUS
@@ -812,10 +813,14 @@ void dispatchAction(TouchAction act) {
     return;
   }
 
-  // ── Adv Info: only left tap / swipe left goes back ───────────
+  // ── Adv Info: left goes back, right / up / down flips the page ──
   if (currentState == STATE_ADV_INFO) {
     if (act == ACT_TAP_LEFT || act == ACT_SWIPE_LEFT) {
       goBack();
+    } else if (act == ACT_TAP_RIGHT || act == ACT_SWIPE_RIGHT ||
+               act == ACT_SWIPE_UP  || act == ACT_SWIPE_DOWN) {
+      advInfoPage ^= 1;
+      updateContentArea();
     }
     return;
   }
@@ -871,6 +876,21 @@ void pollApClients() {
   int n = WiFi.softAPgetStationNum();
   if (n != lastNum || millis() - lastRefresh >= 3000) {
     lastNum     = n;
+    lastRefresh = millis();
+    updateContentArea();
+  }
+}
+
+
+// ============================================================
+//  pollAdvInfo()
+//  Keeps the System Info screen live (uptime, heap, Pi values,
+//  link state) — redraws every 2 s while it is shown.
+// ============================================================
+void pollAdvInfo() {
+  static uint32_t lastRefresh = 0;
+  if (currentState != STATE_ADV_INFO) return;
+  if (millis() - lastRefresh >= 2000) {
     lastRefresh = millis();
     updateContentArea();
   }
@@ -942,9 +962,15 @@ void updateContentArea() {
       break;
 
     case STATE_ADV_INFO:
-      drawHeader("System Info");
-      drawAdvInfoContent();
-      drawTouchBar("BACK", "---");
+      if (advInfoPage == 1) {
+        drawHeader("Pi Info");
+        drawAdvInfoPiContent();
+        drawTouchBar("BACK", "ESP");
+      } else {
+        drawHeader("ESP32 Info");
+        drawAdvInfoContent();
+        drawTouchBar("BACK", "PI");
+      }
       break;
 
     case STATE_AP_SELECT:

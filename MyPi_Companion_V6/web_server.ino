@@ -139,6 +139,16 @@ void handleStatus() {
   server.send(200, "application/json", json);
 }
 
+// Append s to json with JSON string escaping (no surrounding quotes)
+static void _jsonAppendEsc(String &json, const char *s) {
+  for (; *s; s++) {
+    char c = *s;
+    if (c == '"' || c == '\\') { json += '\\'; json += c; }
+    else if ((uint8_t)c < 0x20) json += ' ';
+    else json += c;
+  }
+}
+
 void handleApiInfo() {
   unsigned long ms = millis();
   String json = "{";
@@ -164,7 +174,17 @@ void handleApiInfo() {
   }
   json += ",\"fw_version\":\"" FW_VERSION "\"";
   json += ",\"fw_date\":\""; json += dateBuf; json += "\"";
-  json += "}";
+  // Pi system info (STATUS:SYS) — every key the daemon sent, in its order
+  json += ",\"pi_sys_age\":";
+  json += piSysMs ? (long)((millis() - piSysMs) / 1000) : -1L;
+  json += ",\"pi_sys\":[";
+  for (int i = 0; i < piSysCount; i++) {
+    if (i) json += ',';
+    json += "[\""; _jsonAppendEsc(json, piSys[i].key);
+    json += "\",\""; _jsonAppendEsc(json, piSys[i].val);
+    json += "\"]";
+  }
+  json += "]}";
   server.send(200, "application/json", json);
 }
 

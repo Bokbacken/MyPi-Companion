@@ -10,7 +10,7 @@
 //  Serial protocol (115200 baud, USB CDC → /dev/ttyACM0 on Pi)
 //    ESP32→Pi : HELLO | CMD:GET_STATUS | CMD:CONNECT:<p>
 //               CMD:START_AP | CMD:STOP_AP | CMD:ADDWIFI:...
-//    Pi→ESP32 : ACK | STATUS:SSID:... | STATUS:IP:... | PROFILES:...
+//    Pi→ESP32 : ACK | STATUS:SSID:... | STATUS:IP:... | STATUS:SYS:... | PROFILES:...
 //               OK:CONNECT:... | ERR:CONNECT:... | TERM:OUT:...
 //
 //  Multi-file layout:
@@ -127,6 +127,14 @@ PiIface piIfaces[MAX_PI_IFACES];
 int     piIfaceCount   = 0;
 int     piIfaceIdx     = 0;   // currently displayed interface
 unsigned long lastIfaceScrollMs = 0;
+
+// Pi system info (received via STATUS:SYS:)
+PiSysKV piSys[MAX_PI_SYS];
+int     piSysCount  = 0;
+unsigned long piSysMs = 0;    // millis() of last STATUS:SYS (0 = never)
+
+// System Info screen page: 0 = ESP32, 1 = Raspberry Pi
+int     advInfoPage = 0;
 
 // -----------------------------------------------------------
 //  Menu indices
@@ -450,6 +458,7 @@ static void _loopBody() {
   if (currentState == STATE_ESP_SCAN) pollWifiScan();
   if (currentState == STATE_PI_SCAN)  pollPiScan();
   pollApClients();
+  pollAdvInfo();
 
   // Install-on-Pi requested from web UI (set by handleApiInstallOnPi)
   if (pendingPiInstall) {

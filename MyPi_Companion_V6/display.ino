@@ -940,7 +940,118 @@ void drawAdvInfoContent() {
   drawTxt(freeFsBuf,   vx, y, COL_TEXT, COL_BG);  y += R + 4;
 
   gfx->drawFastHLine(4, y, SCREEN_W - 8, COL_BORDER);  y += 6;
-  drawTxt("Swipe L: back", 4, y, COL_DIM, COL_BG);
+  drawTxt("L: back   R: Pi info", 4, y, COL_DIM, COL_BG);
+}
+
+// ── Raspberry Pi page (data from STATUS:SYS) ─────────────────────
+#define INFO_VAL_CHARS 17   // (SCREEN_W - 68 - 2) / 6 px per glyph
+
+static void _infoRow(int &y, const char *k, const char *v, uint16_t col) {
+  char buf[INFO_VAL_CHARS + 1];
+  strlcpy(buf, (v && *v) ? v : "---", sizeof(buf));
+  drawTxt(k,   4,  y, COL_DIM, COL_BG);
+  drawTxt(buf, 68, y, (v && *v) ? col : COL_DIM, COL_BG);
+  y += 14;
+}
+
+// "Raspberry Pi 4 Model B Rev 1.4" → "Pi 4 B r1.4"
+static void _shortModel(const char *in, char *out, size_t len) {
+  String m(in);
+  m.replace("Raspberry Pi", "Pi");
+  m.replace(" Model ", " ");
+  m.replace(" Plus", "+");
+  m.replace(" Rev ", " r");
+  strlcpy(out, m.c_str(), len);
+}
+
+void drawAdvInfoPiContent() {
+  gfx->setTextSize(1);
+  int y = CONTENT_TOP + 4;
+
+  if (piSysCount == 0) {
+    drawTxt("No Pi system info yet.", 4, y, COL_TEXT, COL_BG);  y += 18;
+    if (piConnected) {
+      drawTxt("The Pi daemon is too",   4, y, COL_DIM, COL_BG);  y += 12;
+      drawTxt("old - reinstall it with", 4, y, COL_DIM, COL_BG); y += 12;
+      drawTxt("Advanced > Install.",     4, y, COL_DIM, COL_BG); y += 12;
+    } else {
+      drawTxt("Pi link is offline.",    4, y, COL_ERR, COL_BG);  y += 12;
+    }
+  } else {
+    char buf[40];
+    // Values go stale when the link drops — show them dimmed
+    bool fresh = piConnected && (millis() - piSysMs) < 20000UL;
+    uint16_t txt = fresh ? COL_TEXT : COL_DIM;
+
+    _infoRow(y, "Host    :", piSysGet("host"), fresh ? COL_ACCENT : COL_DIM);
+    _shortModel(piSysGet("model"), buf, sizeof(buf));
+    _infoRow(y, "Model   :", buf, txt);
+    // "bookworm 64-bit" fits better than PRETTY_NAME
+    const char *code = piSysGet("code");
+    const char *arch = piSysGet("arch");
+    if (*code) {
+      bool b64 = strstr(arch, "64") != nullptr;
+      snprintf(buf, sizeof(buf), "%s%s", code, *arch ? (b64 ? " 64-bit" : " 32-bit") : "");
+    } else {
+      strlcpy(buf, piSysGet("os"), sizeof(buf));
+    }
+    _infoRow(y, "OS      :", buf, txt);
+    _infoRow(y, "Kernel  :", piSysGet("kernel"), txt);
+    const char *dv = piSysGet("daemon");
+    if (*dv) snprintf(buf, sizeof(buf), "v%s", dv); else buf[0] = 0;
+    _infoRow(y, "Daemon  :", buf, txt);
+
+    gfx->drawFastHLine(4, y + 2, SCREEN_W - 8, COL_BORDER);  y += 8;
+
+    // Uptime "3d 04h 12m"
+    long up = atol(piSysGet("up"));
+    if (*piSysGet("up")) {
+      if (up >= 86400) snprintf(buf, sizeof(buf), "%ldd %02ldh %02ldm", up / 86400, (up / 3600) % 24, (up / 60) % 60);
+      else             snprintf(buf, sizeof(buf), "%ldh %02ldm", up / 3600, (up / 60) % 60);
+    } else buf[0] = 0;
+    _infoRow(y, "Uptime  :", buf, txt);
+
+    const char *tc = piSysGet("temp");
+    float t = atof(tc);
+    if (*tc) snprintf(buf, sizeof(buf), "%s C", tc); else buf[0] = 0;
+    _infoRow(y, "CPU temp:", buf, !fresh ? COL_DIM : t >= 80 ? COL_ERR : t >= 70 ? COL_ACCENT : COL_TEXT);
+
+    _infoRow(y, "Load 1m :", piSysGet("load"), txt);
+    const char *mem = piSysGet("mem");
+    if (*mem) snprintf(buf, sizeof(buf), "%s MB", mem); else buf[0] = 0;
+    _infoRow(y, "RAM     :", buf, txt);
+    const char *dk = piSysGet("disk");
+    if (*dk) snprintf(buf, sizeof(buf), "%s GB", dk); else buf[0] = 0;
+    _infoRow(y, "Disk /  :", buf, txt);
+
+    // Throttle flags: bit0 under-voltage now, bits1-3 capped/throttled/
+    // soft-limit now, bit16 under-voltage since boot, bits17-19 since boot
+    const char *th = piSysGet("thr");
+    uint16_t pc = COL_ACTIVE;
+    if (*th) {
+      unsigned long f = strtoul(th, nullptr, 16);
+      if      (f & 0x1)     { strlcpy(buf, "UNDERVOLTAGE!", sizeof(buf)); pc = COL_ERR; }
+      else if (f & 0xE)     { strlcpy(buf, "THROTTLED!",    sizeof(buf)); pc = COL_ERR; }
+      else if (f & 0x10000) { strlcpy(buf, "UV since boot", sizeof(buf)); pc = COL_ACCENT; }
+      else if (f & 0xE0000) { strlcpy(buf, "Thr since boot", sizeof(buf)); pc = COL_ACCENT; }
+      else                    strlcpy(buf, "OK", sizeof(buf));
+    } else buf[0] = 0;
+    _infoRow(y, "Power   :", buf, fresh ? pc : COL_DIM);
+
+    const char *ws = piSysGet("wifi");
+    if (*ws) snprintf(buf, sizeof(buf), "%s dBm", ws); else buf[0] = 0;
+    int dbm = atoi(ws);
+    _infoRow(y, "Wi-Fi   :", buf, !fresh ? COL_DIM : dbm <= -80 ? COL_ERR : dbm <= -70 ? COL_ACCENT : COL_TEXT);
+
+    const char *ntp = piSysGet("ntp");
+    bool sync = strcmp(ntp, "yes") == 0;
+    _infoRow(y, "Clock   :", *ntp ? (sync ? "NTP synced" : "not synced") : "",
+             !fresh ? COL_DIM : sync ? COL_TEXT : COL_ACCENT);
+  }
+
+  y = CONTENT_TOP + CONTENT_H - 14;
+  gfx->drawFastHLine(4, y - 4, SCREEN_W - 8, COL_BORDER);
+  drawTxt("L: back   R: ESP info", 4, y, COL_DIM, COL_BG);
 }
 
 

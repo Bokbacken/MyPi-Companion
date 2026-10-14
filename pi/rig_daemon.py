@@ -36,6 +36,10 @@ Pi → ESP32:
   STATUS:IP:<ip>               — current IP (or NONE)
   STATUS:IFACES:<n>:<ip>,...   — all active IPv4 interfaces (or NONE)
   STATUS:PORT:<device>         — USB serial port in use (e.g. /dev/ttyACM0)
+  STATUS:SYS:<k>=<v>|<k>=<v>…  — Pi system info as key/value pairs (see
+                                 get_sys_info()); the ESP keeps unknown keys
+                                 and shows them on the web Info page, so new
+                                 keys need no firmware change
   OK:CONNECT:<profile>         — connection succeeded
   ERR:CONNECT:<profile>        — connection failed
   OK:ADDWIFI:<ssid>            — profile added successfully
@@ -58,6 +62,7 @@ import glob
 import json
 import logging
 import os
+import platform
 import pty
 import select
 import signal
@@ -72,6 +77,7 @@ import serial  # apt-get install python3-serial
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
+DAEMON_VERSION    = "6.3"  # reported as STATUS:SYS daemon=… (bump on protocol changes)
 BAUD              = 115_200
 POLL_INTERVAL     = 2.0   # seconds between port scans
 KEEPALIVE_SECS    = 30    # send STATUS:* at this interval
@@ -381,6 +387,160 @@ def scan_wifi(ser: serial.Serial) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Pi system info  (STATUS:SYS)
+# ---------------------------------------------------------------------------
+def _read(path: str) -> str:
+    try:
+        with open(path, "r", errors="replace") as fh:
+            return fh.read().replace("\x00", "").strip()
+    except OSError:
+        return ""
+
+
+def _os_release() -> str:
+    """'Debian GNU/Linux 12 (bookworm)' from /etc/os-release, or ''."""
+    for line in _read("/etc/os-release").splitlines():
+        if line.startswith("PRETTY_NAME="):
+            return line.split("=", 1)[1].strip().strip('"')
+    return ""
+
+
+def _os_codename() -> str:
+    for line in _read("/etc/os-release").splitlines():
+        if line.startswith("VERSION_CODENAME="):
+            return line.split("=", 1)[1].strip().strip('"')
+    return ""
+
+
+def _throttled() -> str:
+    """Firmware throttle flags as hex ('0x0' = all good), or '' if unknown.
+
+    Bit 0 under-voltage now, 1 freq capped now, 2 throttled now, 3 soft temp
+    limit now; bits 16-19 = same conditions have occurred since boot.
+    """
+    raw = _read("/sys/devices/platform/soc/soc:firmware/get_throttled")
+    if raw:
+        try:
+            return hex(int(raw, 16))
+        except ValueError:
+            pass
+    try:
+        out = subprocess.run(["vcgencmd", "get_throttled"],
+                             capture_output=True, text=True, timeout=3).stdout
+        if "=" in out:
+            return hex(int(out.split("=", 1)[1].strip(), 16))
+    except Exception:
+        pass
+    return ""
+
+
+def _wifi_dbm() -> str:
+    """Signal level of WIFI_IFACE in dBm from /proc/net/wireless, or ''."""
+    for line in _read("/proc/net/wireless").splitlines():
+        if line.strip().startswith(WIFI_IFACE + ":"):
+            parts = line.split()
+            if len(parts) >= 4:
+                try:
+                    return str(int(float(parts[3])))
+                except ValueError:
+                    pass
+    return ""
+
+
+def _ntp_synced() -> str:
+    """'yes' / 'no' from timedatectl, or '' if unavailable."""
+    try:
+        out = subprocess.run(
+            ["timedatectl", "show", "-p", "NTPSynchronized", "--value"],
+            capture_output=True, text=True, timeout=3).stdout.strip()
+        return out if out in ("yes", "no") else ""
+    except Exception:
+        return ""
+
+
+# Values that never change while the daemon runs — read once
+_STATIC_SYS = {}
+
+# Slow lookups (subprocess) are cached for this long
+_SLOW_SYS_TTL = 30.0
+_slow_sys_cache: dict = {}
+_slow_sys_ts = 0.0
+
+
+def get_sys_info() -> List[Tuple[str, str]]:
+    """Return ordered (key, value) pairs for STATUS:SYS.
+
+    Keys (all optional — empty values are omitted):
+      host    hostname                    model   board model string
+      os      PRETTY_NAME                 code    OS codename (bookworm…)
+      arch    machine (aarch64/armv7l)    kernel  kernel release
+      daemon  DAEMON_VERSION              up      uptime in seconds
+      load    1-min load average          temp    SoC temperature, °C
+      mem     used/total RAM in MB        disk    used/total of / in GB
+      thr     throttle flags (hex)        wifi    wlan0 signal in dBm
+      ntp     clock synchronized yes/no
+    """
+    global _slow_sys_ts, _slow_sys_cache
+    if not _STATIC_SYS:
+        _STATIC_SYS.update({
+            "model":  _read("/proc/device-tree/model"),
+            "os":     _os_release(),
+            "code":   _os_codename(),
+            "arch":   platform.machine(),
+            "kernel": platform.release(),
+            "daemon": DAEMON_VERSION,
+        })
+
+    info: List[Tuple[str, str]] = [("host", platform.node())]
+    info += [(k, _STATIC_SYS[k]) for k in
+             ("model", "os", "code", "arch", "kernel", "daemon")]
+
+    try:
+        info.append(("up", str(int(float(_read("/proc/uptime").split()[0])))))
+    except (IndexError, ValueError):
+        pass
+    try:
+        info.append(("load", _read("/proc/loadavg").split()[0]))
+    except IndexError:
+        pass
+    t = _read("/sys/class/thermal/thermal_zone0/temp")
+    if t.lstrip("-").isdigit():
+        info.append(("temp", f"{int(t) / 1000:.1f}"))
+
+    mem = {}
+    for line in _read("/proc/meminfo").splitlines():
+        k, _, v = line.partition(":")
+        if k in ("MemTotal", "MemAvailable"):
+            mem[k] = int(v.split()[0])          # kB
+    if len(mem) == 2:
+        used = (mem["MemTotal"] - mem["MemAvailable"]) // 1024
+        info.append(("mem", f"{used}/{mem['MemTotal'] // 1024}"))
+
+    try:
+        st = os.statvfs("/")
+        total = st.f_blocks * st.f_frsize / 1e9
+        used  = (st.f_blocks - st.f_bfree) * st.f_frsize / 1e9
+        info.append(("disk", f"{used:.1f}/{total:.1f}"))
+    except OSError:
+        pass
+
+    now = time.time()
+    if now - _slow_sys_ts > _SLOW_SYS_TTL:
+        _slow_sys_cache = {"thr": _throttled(), "ntp": _ntp_synced()}
+        _slow_sys_ts = now
+    info.append(("thr", _slow_sys_cache.get("thr", "")))
+    info.append(("wifi", _wifi_dbm()))
+    info.append(("ntp", _slow_sys_cache.get("ntp", "")))
+
+    def clean(v: str) -> str:
+        # '|' separates pairs; keep it ASCII so the display font can render it
+        v = v.replace("|", "/").replace("\n", " ").strip()
+        return v.encode("ascii", "replace").decode("ascii")[:48]
+
+    return [(k, clean(v)) for k, v in info if v]
+
+
+# ---------------------------------------------------------------------------
 # ESP32 USB disk (MSC) eject
 # ---------------------------------------------------------------------------
 ESP_MSC_VENDOR = "MyPi"   # SCSI vendor ID reported by msc.ino
@@ -486,6 +646,13 @@ def send_status(ser: serial.Serial) -> None:
     send(ser, f"STATUS:IFACES:{payload}")
     time.sleep(0.05)
     send(ser, f"STATUS:PORT:{_active_port}")
+    time.sleep(0.05)
+    try:
+        sysinfo = get_sys_info()
+    except Exception as exc:          # never let diagnostics break the link
+        log.warning("get_sys_info error: %s", exc)
+        sysinfo = [("daemon", DAEMON_VERSION)]
+    send(ser, "STATUS:SYS:" + "|".join(f"{k}={v}" for k, v in sysinfo))
 
 
 def send_profiles(ser: serial.Serial) -> None:

@@ -43,6 +43,13 @@ void parseProfiles(const String& payload) {
 // ============================================================
 //  MESSAGE DISPATCHER
 // ============================================================
+// Value for a STATUS:SYS key, or "" if the daemon did not send it
+const char* piSysGet(const char *key) {
+  for (int i = 0; i < piSysCount; i++)
+    if (strcmp(piSys[i].key, key) == 0) return piSys[i].val;
+  return "";
+}
+
 void processMsg(const String& msg) {
 
   // ACK — Pi confirms handshake; start the polling clock
@@ -134,6 +141,29 @@ void processMsg(const String& msg) {
     lastStatusMs = millis();
     if (!piConnected) piConnected = true;
     if (currentState == STATE_STATUS) { drawStatusBar(); gfx->flush(); }
+    return;
+  }
+
+  // STATUS:SYS:<k>=<v>|<k>=<v>|...  — Pi system info, replaces the whole table
+  if (msg.startsWith("STATUS:SYS:")) {
+    const char *p = msg.c_str() + 11;
+    piSysCount = 0;
+    while (*p && piSysCount < MAX_PI_SYS) {
+      const char *end = strchr(p, '|');
+      if (!end) end = p + strlen(p);
+      const char *eq = (const char *)memchr(p, '=', end - p);
+      if (eq && eq > p) {
+        PiSysKV &kv = piSys[piSysCount];
+        size_t kl = min((size_t)(eq - p), (size_t)PI_SYS_KEY_LEN - 1);
+        size_t vl = min((size_t)(end - eq - 1), (size_t)PI_SYS_VAL_LEN - 1);
+        memcpy(kv.key, p, kl);       kv.key[kl] = 0;
+        memcpy(kv.val, eq + 1, vl);  kv.val[vl] = 0;
+        piSysCount++;
+      }
+      p = *end ? end + 1 : end;
+    }
+    piSysMs = millis();
+    if (currentState == STATE_ADV_INFO && advInfoPage == 1) updateContentArea();
     return;
   }
 
