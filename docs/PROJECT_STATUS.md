@@ -445,7 +445,7 @@ Build: ~57 % of the 3 MB app partition.
 | AP-aware STA | Non-blocking `wifiConnectSlot()` + `wifiService()`; `WIFI_AP_STA` while the AP runs; `wifiDisconnect()` keeps web/mDNS when the AP runs; web routes registered once | #23 (merged) | long-run soak test in progress (~1 h uptime so far, no issues) |
 | OTA progress | Web: XHR upload % then indeterminate *Flashing, please wait...* bar; display: progress redrawn in 5 % steps (flash 3–4× faster than per-chunk redraw) | #23/#24 (merged) | **verified** |
 | AP web editor | 2-column cards (1 on phones); reveal button fixed via `/api/approfile/getpass`; `/index.html` alias + back links (Chrome-on-Android workaround) | #24 (merged) | **verified** |
-| AP client limit | `AP_MAX_CLIENTS 8` passed to `WiFi.softAP()` (was library default 4); touch AP screen `Clients (n/8):`, 4 rows or 3 + `+N more (web)`; web diag `n/8 client(s)` + `(full)`; `/api/apstatus` `maxClients`; docs updated | v6.3.3 PR | not yet tested (needs > 4 clients) |
+| AP client limit | `AP_MAX_CLIENTS 8` passed to `WiFi.softAP()` (was library default 4); touch AP screen `Clients (n/8):`, 4 rows or 3 + `+N more (web)`; web diag `n/8 client(s)` + `(full)`; `/api/apstatus` `maxClients`; docs updated | v6.3.3 PR (#25) | **verified** with 5 clients (all named); 8/8 + `(full)` not yet tested |
 
 ## v6.2 — released 2026-10-14
 
