@@ -23,7 +23,7 @@ browser, and install the Pi-side software, all without a monitor or keyboard on 
 11. [OTA firmware update](#11-ota-firmware-update)
 12. [NVS profile slots](#12-nvs-profile-slots)
 13. [SD card and storage](#13-sd-card-and-storage)
-14. [Macros and quick-action buttons](#14-macros-and-quick-action-buttons)
+14. [Macros and quick buttons](#14-macros-and-quick-buttons)
 15. [Troubleshooting](#15-troubleshooting)
 
 ---
@@ -442,9 +442,9 @@ Open one of these:
 
 | Page | Description |
 |---|---|
-| `/` | Dashboard: quick-action buttons, Pi link status, ESP info |
+| `/` | Dashboard: Pi link status, ESP info, links to the other pages |
 | `/terminal` | xterm.js terminal on the Pi's bash. Each browser tab gets its own session (up to 4); command history is shared between tabs (Ctrl+Up/Down) |
-| `/macros` | Manage terminal macros and quick-action buttons |
+| `/macros` | Edit terminal macros, menus and quick buttons (used in `/terminal`) |
 | `/storage` | File manager for internal flash and the SD card |
 | `/ap-profiles` | Edit the 4 AP profiles (name, SSID, password, subnet, NAT, start on boot, hide on boot). The cards are shown two per row (one per row on a phone). A saved password shows as dots; the eye button shows the real password. The status table shows the client count against the limit (e.g. `4/8 client(s)`, `(full)` at the limit) and lists each connected AP client with the last IP octet (e.g. `.2`), the manufacturer when known (Raspberry Pi, Apple, …) or the end of its MAC, and the full MAC. A host name, when found, replaces the manufacturer (which moves into brackets); hover the MAC to see how the name was found |
 | `/update` | OTA firmware update |
@@ -706,7 +706,7 @@ offline `pyserial` wheel, so the install works without internet access.
 
 ---
 
-## 14. Macros and quick-action buttons
+## 14. Macros and quick buttons
 
 **Macros** are saved shell commands that are sent to the Pi terminal.
 
@@ -715,16 +715,21 @@ offline `pyserial` wheel, so the install works without internet access.
 - Manage them on **`/macros`**. You can also import and export them as JSON; examples
   are in [`examples/`](../examples/).
 
-**Quick-action buttons** on the home page (`/`) and in the terminal are linked to macro
-slots. Clicking a button sends that macro's command to the Pi.
+**Quick buttons** sit in the side panel of `/terminal`. Each is linked to a macro in the
+pool. Clicking a button sends that macro's command to the Pi.
 
 - Up to **25 quick-button slots** (stored in NVS, survive firmware updates)
+- The same buttons appear in every terminal session (1–4)
 
-There are three ways to run a macro:
+Macros and quick buttons can **only be run from a terminal session** (`/terminal`,
+sessions 1–4). The dashboard (`/`) has no quick buttons or macros. There are two ways to
+run a macro:
 
-- Click a quick-action button on the dashboard
 - Click a quick button in the `/terminal` side panel
 - Choose it from the terminal's macro menu
+
+To edit macros, menus and quick-button assignments, open **`/macros`** (or *Edit macros
+& menus…* in the terminal's menu).
 
 Macro and quick-button commands are not added to the shared terminal history. Only
 commands you type yourself are stored.
