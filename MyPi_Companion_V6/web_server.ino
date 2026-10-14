@@ -929,6 +929,7 @@ void startWebServer() {
 
   // ── Pages ──────────────────────────────────────────────────
   server.on("/",            handleRoot);
+  server.on("/index.html",  handleRoot);   // Chrome may auto-append /index.html
   server.on("/networks",    handleNetworks);
   server.on("/installonpi", handleInstallPiPage);
   server.on("/info",        handleSysInfoPage);
