@@ -131,7 +131,7 @@
 //  Wi-Fi scan + keyboard
 // -----------------------------------------------------------
 #define MAX_SCAN_RESULTS        20
-#define KB_RANGE_COUNT           6
+#define KB_RANGE_COUNT           7
 
 // -----------------------------------------------------------
 //  Structs

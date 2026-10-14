@@ -599,22 +599,70 @@ void drawPiScanContent() {
 
 // Short tab labels  (must match KB_RANGES order in MyPi_Companion_V6.ino)
 static const char * const KB_TAB_NAMES[KB_RANGE_COUNT] = {
-  "az", "AZ", "09", "S1", "S2", "In"
+  "az", "AZ", "09", "S1", "S2", "I1", "I2"
 };
 
-// Map a Latin-1 byte (as stored in KB_RANGES[5] / kbPass) to the glyph
-// index of the built-in CP437 GFX font. Only the 20 KB "In" characters
-// need mapping; anything else is returned unchanged.
+// Characters missing from the CP437 GFX font, drawn as custom 5x8 bitmaps.
+// rows[r] bit4 = leftmost pixel; row 7 is the descender row.
+struct KbGlyph { uint8_t code; uint8_t rows[8]; };
+static const KbGlyph KB_GLYPHS[] = {
+  { 0xF8, { 0x00, 0x00, 0x0E, 0x13, 0x15, 0x19, 0x0E, 0x00 } },  // ø
+  { 0xD8, { 0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E, 0x00 } },  // Ø
+  { 0xF0, { 0x06, 0x0E, 0x01, 0x0F, 0x11, 0x11, 0x0E, 0x00 } },  // ð
+  { 0xD0, { 0x0E, 0x09, 0x09, 0x1D, 0x09, 0x09, 0x0E, 0x00 } },  // Ð
+  { 0xFE, { 0x10, 0x10, 0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10 } },  // þ
+  { 0xDE, { 0x10, 0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x00 } },  // Þ
+  { 0x9C, { 0x00, 0x00, 0x0A, 0x15, 0x17, 0x14, 0x0F, 0x00 } },  // œ
+  { 0xFD, { 0x02, 0x04, 0x11, 0x11, 0x0F, 0x01, 0x0E, 0x00 } },  // ý
+  { 0xE3, { 0x0D, 0x16, 0x0E, 0x01, 0x0F, 0x11, 0x0F, 0x00 } },  // ã
+  { 0xF5, { 0x0D, 0x16, 0x0E, 0x11, 0x11, 0x11, 0x0E, 0x00 } },  // õ
+  { 0x80, { 0x07, 0x08, 0x1E, 0x08, 0x1E, 0x08, 0x07, 0x00 } },  // €
+  { 0xA4, { 0x00, 0x11, 0x0E, 0x0A, 0x0E, 0x11, 0x00, 0x00 } },  // ¤
+};
+
+// Returns the 8 bitmap rows for ch, or nullptr if the CP437 font has it.
+// (Returns a plain pointer: Arduino's auto-prototypes can't see KbGlyph.)
+static const uint8_t *_kbCustomGlyph(char ch) {
+  for (const KbGlyph &g : KB_GLYPHS) if (g.code == (uint8_t)ch) return g.rows;
+  return nullptr;
+}
+
+// Map a Windows-1252 byte (as stored in KB_RANGES / kbPass) to the glyph
+// index of the built-in CP437 GFX font. Bytes with a custom glyph map to a
+// blank so _kbDrawCustomGlyphs() can paint them on top afterwards.
 static char _latin1ToCp437(char ch) {
+  if (_kbCustomGlyph(ch)) return ' ';
   switch ((uint8_t)ch) {
     case 0xE5: return '\x86';  case 0xE4: return '\x84';  case 0xF6: return '\x94';  // å ä ö
     case 0xC5: return '\x8F';  case 0xC4: return '\x8E';  case 0xD6: return '\x99';  // Å Ä Ö
-    case 0xE9: return '\x82';  case 0xE8: return '\x8A';  case 0xEA: return '\x88';  // é è ê
-    case 0xEB: return '\x89';  case 0xE0: return '\x85';  case 0xE2: return '\x83';  // ë à â
-    case 0xE7: return '\x87';  case 0xFC: return '\x81';  case 0xFB: return '\x96';  // ç ü û
-    case 0xF9: return '\x97';  case 0xFA: return '\xA3';  case 0xEE: return '\x8C';  // ù ú î
-    case 0xEF: return '\x8B';  case 0xF4: return '\x93';                             // ï ô
+    case 0xE6: return '\x91';  case 0xC6: return '\x92';                             // æ Æ
+    case 0xFC: return '\x81';  case 0xDC: return '\x9A';  case 0xDF: return '\xE1';  // ü Ü ß
+    case 0xE9: return '\x82';  case 0xC9: return '\x90';  case 0xE8: return '\x8A';  // é É è
+    case 0xEA: return '\x88';  case 0xEB: return '\x89';  case 0xE0: return '\x85';  // ê ë à
+    case 0xE2: return '\x83';  case 0xE7: return '\x87';  case 0xC7: return '\x80';  // â ç Ç
+    case 0xFB: return '\x96';  case 0xF9: return '\x97';  case 0xFA: return '\xA3';  // û ù ú
+    case 0xEE: return '\x8C';  case 0xEF: return '\x8B';  case 0xF4: return '\x93';  // î ï ô
+    case 0xFF: return '\x98';  case 0xE1: return '\xA0';  case 0xED: return '\xA1';  // ÿ á í
+    case 0xF3: return '\xA2';  case 0xF1: return '\xA4';  case 0xD1: return '\xA5';  // ó ñ Ñ
+    case 0xEC: return '\x8D';  case 0xF2: return '\x95';                             // ì ò
+    case 0xBF: return '\xA8';  case 0xA1: return '\xAD';                             // ¿ ¡
+    case 0xA3: return '\x9C';  case 0xA5: return '\x9D';  case 0xA7: return '\x15';  // £ ¥ §
     default:   return ch;
+  }
+}
+
+// Paint custom glyphs for a string already printed with _latin1ToCp437Str()
+// at (x, y). Each character cell is 6*size px wide.
+static void _kbDrawCustomGlyphs(const char *s, int16_t x, int16_t y,
+                                uint8_t size, uint16_t fg) {
+  for (int i = 0; s[i]; i++) {
+    const uint8_t *rows = _kbCustomGlyph(s[i]);
+    if (!rows) continue;
+    int16_t cx = x + i * 6 * size;
+    for (int r = 0; r < 8; r++)
+      for (int c = 0; c < 5; c++)
+        if (rows[r] & (0x10 >> c))
+          gfx->fillRect(cx + c * size, y + r * size, size, size, fg);
   }
 }
 
@@ -653,13 +701,15 @@ void drawEspKbContent() {
       char disp[24];
       _latin1ToCp437Str(kbPass, disp, sizeof(disp));
       drawTxt(disp, 2, KB_Y_PASS, COL_TEXT, COL_BG);
+      _kbDrawCustomGlyphs(kbPass, 2, KB_Y_PASS, 1, COL_TEXT);
       int cx2 = 2 + kbPassLen * 6;
       if (cx2 < SCREEN_W - 4) gfx->fillRect(cx2, KB_Y_PASS, 3, 8, COL_TEXT);
     } else {
-      char buf[24];
-      snprintf(buf, sizeof(buf), "...%s", kbPass + kbPassLen - 19);
-      _latin1ToCp437Str(buf, buf, sizeof(buf));
+      char raw[24], buf[24];
+      snprintf(raw, sizeof(raw), "...%s", kbPass + kbPassLen - 19);
+      _latin1ToCp437Str(raw, buf, sizeof(buf));
       drawTxt(buf, 2, KB_Y_PASS, COL_TEXT, COL_BG);
+      _kbDrawCustomGlyphs(raw, 2, KB_Y_PASS, 1, COL_TEXT);
       gfx->fillRect(2 + 22 * 6, KB_Y_PASS, 3, 8, COL_TEXT);
     }
   }
@@ -668,7 +718,7 @@ void drawEspKbContent() {
 
   // ── Range tabs ────────────────────────────────────────────
   {
-    int tabW = SCREEN_W / KB_RANGE_COUNT;   // 28 px
+    int tabW = SCREEN_W / KB_RANGE_COUNT;   // 24 px
     for (int t = 0; t < KB_RANGE_COUNT; t++) {
       int      tx  = t * tabW;
       bool     act = (t == kbRangeIdx);
@@ -724,6 +774,12 @@ void drawEspKbContent() {
         gfx->setTextSize(1);
       } else {
         drawCentredTxt(lbl, SCREEN_W / 2, y + (rowH - 8) / 2, fg, bg);
+      }
+      if (_kbCustomGlyph(ch)) {   // single-char label: cell centred at SCREEN_W/2
+        uint8_t sz = isCur ? 2 : 1;
+        const char one[2] = { ch, '\0' };
+        _kbDrawCustomGlyphs(one, SCREEN_W / 2 - 3 * sz,
+                            y + (rowH - 8 * sz) / 2, sz, fg);
       }
 
       // Scroll arrows at the edge of the centre row

@@ -296,7 +296,7 @@ Without a physical keyboard, passwords are entered with a character wheel.
 
 ```
 ┌──────────────────────┐
-│ az AZ 09 S1 S2 In    │  ← range tabs (current tab highlighted)
+│ az AZ 09 S1 S2 I1 I2 │  ← range tabs (current tab highlighted)
 │ secretk|             │  ← password field with cursor (plain text)
 │         h            │  -2
 │         i            │  -1
@@ -335,18 +335,26 @@ screen.
 | `AZ` | A–Z (26) |
 | `09` | SPC (space), 0–9 (11) |
 | `S1` | `! # @ $ % & * - _ + = . , ? : ; /` (17) |
-| `S2` | `` " ' ( ) [ ] \ { } ^ ~ \| < > ` `` (15) |
-| `In` | `å ä ö Å Ä Ö é è ê ë à â ç ü û ù ú î ï ô` (20) |
+| `S2` | `` " ' ( ) [ ] \ { } ^ ~ \| < > ` € £ ¥ ¤ § `` (20) |
+| `I1` | Nordic + German/Dutch: `å ä ö æ ø ü ë ï é ß ð þ Å Ä Ö Æ Ø Ü É Ð Þ` (21) |
+| `I2` | French/Spanish/Portuguese/Italian: `à â ç è ê î ô û ù ÿ œ á í ó ú ý ñ ã õ ì ò Ç Ñ ¿ ¡` (25) |
 
 **Space** is the first entry of the `09` tab and is shown as `SPC` on the wheel. `S1`
 holds the symbols most used in passwords, and `S2` the brackets and rarer symbols. Every
-printable ASCII symbol is in exactly one tab, so none appears twice.
+printable ASCII symbol is in exactly one tab, and no character appears twice in any tab.
+`I1` covers Swedish, Norwegian, Danish, Finnish, Icelandic, Faroese, German and Dutch;
+`I2` covers French, Spanish, Portuguese and Italian. Uppercase letters that are rare in
+passwords (for example `À`, `Ë`) are left out to keep the wheels short.
 
-Since v6.2 the `In` tab shows all its characters correctly on the display: the wheel,
-the password field and the tab itself show `å ä ö Å Ä Ö é è ê ë à â ç ü û ù ú î ï ô` as
-real letters. When you press **OK** the password is converted to **UTF-8** before it is
-stored or used. That is the encoding WPA2 and the Pi login expect, so a password with
-`å`, `ä` or `ö` entered on the touch screen works the same as one entered on the web.
+All characters are shown as real letters on the display. Most come from the built-in
+font; `ø Ø ð Ð þ Þ œ ý ã õ € ¤` are not in it and are drawn as small custom bitmaps.
+When you press **OK** the password is converted to **UTF-8** before it is stored or used.
+That is the encoding WPA2 and the Pi login expect, so a password with `å`, `ø` or `€`
+entered on the touch screen works the same as one entered on the web.
+
+> **Limitation:** **Install CLI-Pi** types the username and password into the Pi over the
+> USB keyboard, and that path only supports ASCII. Non-ASCII characters (from `I1`, `I2`
+> and the currency signs in `S2`) are skipped there. Use them for Wi-Fi passwords only.
 
 ---
 
