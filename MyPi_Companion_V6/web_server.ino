@@ -1007,6 +1007,7 @@ void startWebServer() {
   server.on("/ap-profiles",        HTTP_GET,  handleApProfilesPage);
   server.on("/api/approfiles",     HTTP_GET,  handleApiGetApProfiles);
   server.on("/api/approfile/save", HTTP_POST, handleApiSaveApProfile);
+  server.on("/api/approfile/getpass", HTTP_GET,  handleApiGetApPass);
   server.on("/api/apstart",        HTTP_POST, handleApiApStart);
   server.on("/api/apstatus",       HTTP_GET,  handleApiApStatus);
 
@@ -1092,6 +1093,17 @@ void handleApiGetApProfiles() {
   }
   json += "]";
   server.send(200, "application/json", json);
+}
+
+// GET /api/approfile/getpass?slot=N — return stored WPA2 password for Reveal button.
+void handleApiGetApPass() {
+  if (!server.hasArg("slot")) { server.send(400,"text/plain","ERR: missing slot"); return; }
+  int slot = server.arg("slot").toInt();
+  if (slot < 0 || slot >= MAX_AP_PROFILES) { server.send(400,"text/plain","ERR: invalid slot"); return; }
+  // Escape so passwords containing " or \ still yield valid JSON
+  String json = "{\"pass\":\"" + _apJsonEsc(apProfiles[slot].pass) + "\"}";
+  server.sendHeader("Cache-Control","no-cache");
+  server.send(200,"application/json",json);
 }
 
 // POST /api/approfile/save — save one AP profile slot
