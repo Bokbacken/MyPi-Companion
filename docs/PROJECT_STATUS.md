@@ -1,6 +1,6 @@
 # MyPi-Companion — Project Status
 
-_Last updated: 2026-10-14 — current firmware: **v6.2 (released)**, release tag `v6.2`_
+_Last updated: 2026-10-14 — current release: **v6.2** (tag `v6.2`); v6.3 in progress (see below)_
 
 > End-user documentation: [USER_GUIDE.md](USER_GUIDE.md).
 
@@ -386,6 +386,17 @@ commit both. The script asserts: no FitAddon, `termFit` present, vertical QB pre
       AP clients always get DNS `1.1.1.1` when NAT is on (upstream/hotel DNS is private and
       unreachable through NAPT). Throughput ~6/3–4 Mbit/s (software NAPT on the ESP32;
       fine for SSH/terminal/web) vs 112/120 Mbit/s directly on the hotel Wi-Fi.
+
+## v6.3 — in progress (not yet tagged)
+
+`FW_VERSION "6.3"`, `DAEMON_VERSION "6.3"`. Build: ~56 % of the 3 MB app partition.
+
+| Area | Change | PR | Hardware |
+|---|---|---|---|
+| International keyboard | `In` split into `I1` (Nordic + DE/NL, 21) and `I2` (FR/ES/PT/IT, 25); `€ £ ¥ ¤ §` added to `S2`; Windows-1252 internally, UTF-8 out; custom 5×8 glyphs for `ø Ø ð Ð þ Þ œ ý ã õ € ¤` | #22 (merged) | **verified** — glyphs legible |
+| Pi system info | Daemon sends `STATUS:SYS:k=v\|…` (host, model, OS, kernel, daemon, uptime, temp, load, RAM, disk, power/throttle, Wi-Fi dBm, NTP); touch System Info has ESP / Pi pages; `/info` Raspberry Pi card; `/api/info` `pi_sys` | #23 | **verified** (new daemon installed) |
+| ESP web connect | `/profiles` ESP32 card + per-slot **ESP** / **Pi** buttons; `/api/espconnect`, `/api/espstatus`, `/api/espscan`, `/api/espdisconnect` | #23 | **verified** — connect works, performance unchanged |
+| AP-aware STA | Non-blocking `wifiConnectSlot()` + `wifiService()`; `WIFI_AP_STA` while the AP runs; `wifiDisconnect()` keeps web/mDNS when the AP runs; web routes registered once | #23 | long-run soak test in progress |
 
 ## v6.2 — released 2026-10-14
 
