@@ -1,6 +1,6 @@
 # MyPi-Companion — Project Status
 
-_Last updated: 2026-10-14 — current firmware: **v6.2 (released)**, release tag `v6.2`_
+_Last updated: 2026-10-14 — current release: **v6.2** (tag `v6.2`); v6.3 in progress (see below)_
 
 > End-user documentation: [USER_GUIDE.md](USER_GUIDE.md).
 
@@ -134,7 +134,13 @@ STATE_AP_BOOT_SELECT — v6.2: pick which AP profile auto-starts on boot (or Non
 ## Wi-Fi behavior
 
 - `wifiAutoConnect()` scans, then tries slots 0–9, skipping SSIDs not visible
-- `wifiConnectSlot(n)` — manual connect: `wifiDisconnect()` → delay → `WiFi.begin()` → `_onConnected()`
+- `wifiConnectSlot(n)` — manual connect (touch or web), **non-blocking since v6.3**:
+  `wifiDisconnect()` → `WiFi.mode(apRunning ? AP_STA : STA)` → `WiFi.begin()`;
+  `wifiService()` in `loop()` calls `_onConnected()` or times out after
+  `WIFI_CONNECT_TIMEOUT_MS` (then `WiFi.disconnect(true)` disables STA only, the AP stays)
+- Globals `espConnecting`, `espConnSlot`, `espConnResult`, `espConnTarget` (main .ino);
+  web requests set `pendingEspConnect` / `pendingEspDisconnect`, handled in `loop()`
+- `startAP()` / `stopAP()` keep STA enabled while `espConnected || espConnecting`
 - **No auto-AP** — AP only starts manually from the Advanced menu
 - `WIFI_AP_STA` if STA is already up when the AP starts
 - `stopAP()`: keeps the web server if STA is still up, otherwise shuts everything down
@@ -146,7 +152,8 @@ STATE_AP_BOOT_SELECT — v6.2: pick which AP profile auto-starts on boot (or Non
 - Runs in **STA mode** too, not only AP mode
 - `_webServerRunning` (static in `web_server.ino`) prevents double start
 - **`webServerStop()`** is the only correct way to stop it — never `server.stop()` directly
-- `wifiDisconnect()` calls `webServerStop()`
+- `wifiDisconnect()` calls `webServerStop()` **only when the AP is not running** (v6.3)
+- Routes are registered once (`_routesRegistered`); a restart only calls `server.begin()`
 
 ### Routes
 
@@ -168,9 +175,13 @@ STATE_AP_BOOT_SELECT — v6.2: pick which AP profile auto-starts on boot (or Non
 | POST | `/api/nvssave` | Save NVS slot |
 | POST | `/api/nvsdel` | Delete NVS slot |
 | POST | `/api/nvsconnect` | Tell Pi to connect an NVS slot |
+| POST | `/api/espconnect` | **v6.3:** connect the ESP itself (`slot`, or `ssid`+`pass` → saved to a slot). Deferred via `pendingEspConnect`; 409 while connecting |
+| POST | `/api/espdisconnect` | **v6.3:** drop ESP STA (409 unless the AP runs) |
+| GET | `/api/espstatus` | **v6.3:** `{connected, connecting, ssid, ip, slot, rssi, channel, target, result, ap, via_ap}` |
+| POST / GET | `/api/espscan` | **v6.3:** start ESP scan / `{running, list:[{ssid,rssi,ch,open}]}` |
 | GET | `/api/quickbtns` | QB slots JSON `[{slot, macroid}, ...]` |
 | POST | `/api/quickbtns/save` | Save one QB slot (`slot`, `macroid`) |
-| GET | `/api/info` | System diagnostics JSON (incl. `pi_ssid`, `pi_conn`) |
+| GET | `/api/info` | System diagnostics JSON (incl. `pi_ssid`, `pi_conn`; **v6.3:** `pi_sys` `[[k,v],…]`, `pi_sys_age` s or -1) |
 | GET | `/api/files` | FFat file list `[{name, size}, ...]` |
 | POST | `/api/files/del` | Delete FFat file (`name`) |
 | POST | `/upload` | Upload file to FFat (multipart `file`) |
@@ -211,6 +222,12 @@ STATUS:CONN:<name>       — NetworkManager connection name (or NONE) → active
                            (profile matching, CMD:CONNECT)
 STATUS:IP:<ip>           — active IP (or NONE)
 STATUS:PORT:<device>     — USB port in use (e.g. ttyACM0)
+STATUS:SYS:k=v|k=v|…     — v6.3 Pi system info, sent with every status reply. Keys:
+                           host model os code arch kernel daemon up load temp
+                           mem(used/total MB) disk(used/total GB) thr(hex) wifi(dBm) ntp(yes/no).
+                           Values ASCII, '|' replaced by '/', max 48 chars, empty keys omitted.
+                           ESP replaces its whole table (MAX_PI_SYS 24) on each line;
+                           unknown keys are kept and shown raw on /info.
 PROFILES:<p1>,<p2>,...   — NM connection names (stored in piProfiles[].ssid)
 PROFILES_FULL:...        — full profile list
 OK:CONNECT:<profile> / ERR:CONNECT:<profile>
@@ -369,6 +386,17 @@ commit both. The script asserts: no FitAddon, `termFit` present, vertical QB pre
       AP clients always get DNS `1.1.1.1` when NAT is on (upstream/hotel DNS is private and
       unreachable through NAPT). Throughput ~6/3–4 Mbit/s (software NAPT on the ESP32;
       fine for SSH/terminal/web) vs 112/120 Mbit/s directly on the hotel Wi-Fi.
+
+## v6.3 — in progress (not yet tagged)
+
+`FW_VERSION "6.3"`, `DAEMON_VERSION "6.3"`. Build: ~56 % of the 3 MB app partition.
+
+| Area | Change | PR | Hardware |
+|---|---|---|---|
+| International keyboard | `In` split into `I1` (Nordic + DE/NL, 21) and `I2` (FR/ES/PT/IT, 25); `€ £ ¥ ¤ §` added to `S2`; Windows-1252 internally, UTF-8 out; custom 5×8 glyphs for `ø Ø ð Ð þ Þ œ ý ã õ € ¤` | #22 (merged) | **verified** — glyphs legible |
+| Pi system info | Daemon sends `STATUS:SYS:k=v\|…` (host, model, OS, kernel, daemon, uptime, temp, load, RAM, disk, power/throttle, Wi-Fi dBm, NTP); touch System Info has ESP / Pi pages; `/info` Raspberry Pi card; `/api/info` `pi_sys` | #23 | **verified** (new daemon installed) |
+| ESP web connect | `/profiles` ESP32 card + per-slot **ESP** / **Pi** buttons; `/api/espconnect`, `/api/espstatus`, `/api/espscan`, `/api/espdisconnect` | #23 | **verified** — connect works, performance unchanged |
+| AP-aware STA | Non-blocking `wifiConnectSlot()` + `wifiService()`; `WIFI_AP_STA` while the AP runs; `wifiDisconnect()` keeps web/mDNS when the AP runs; web routes registered once | #23 | long-run soak test in progress |
 
 ## v6.2 — released 2026-10-14
 

@@ -9,7 +9,7 @@
 // -----------------------------------------------------------
 //  Firmware version
 // -----------------------------------------------------------
-#define FW_VERSION    "6.2"
+#define FW_VERSION    "6.3"
 // __DATE__ = "Oct 13 2026" (compiler-injected, MMM DD YYYY)
 // Reformatted to "DD Mon YYYY" at runtime (see display.ino / web_server.ino)
 
@@ -182,6 +182,17 @@ struct PiProfile {
 struct PiIface {
   char name[PI_IFACE_NAME_LEN];     // e.g. "eth0" or "wlan0"
   char ip[16];                      // e.g. "192.168.1.5"
+};
+
+// Pi system info (STATUS:SYS:k=v|k=v…) — generic key/value table so the
+// daemon can add keys without a firmware change (unknown keys reach /api/info)
+#define MAX_PI_SYS        24
+#define PI_SYS_KEY_LEN    12
+#define PI_SYS_VAL_LEN    49
+
+struct PiSysKV {
+  char key[PI_SYS_KEY_LEN];
+  char val[PI_SYS_VAL_LEN];
 };
 
 // -----------------------------------------------------------

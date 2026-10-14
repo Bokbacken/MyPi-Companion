@@ -10,7 +10,7 @@
 //  Serial protocol (115200 baud, USB CDC → /dev/ttyACM0 on Pi)
 //    ESP32→Pi : HELLO | CMD:GET_STATUS | CMD:CONNECT:<p>
 //               CMD:START_AP | CMD:STOP_AP | CMD:ADDWIFI:...
-//    Pi→ESP32 : ACK | STATUS:SSID:... | STATUS:IP:... | PROFILES:...
+//    Pi→ESP32 : ACK | STATUS:SSID:... | STATUS:IP:... | STATUS:SYS:... | PROFILES:...
 //               OK:CONNECT:... | ERR:CONNECT:... | TERM:OUT:...
 //
 //  Multi-file layout:
@@ -128,6 +128,14 @@ int     piIfaceCount   = 0;
 int     piIfaceIdx     = 0;   // currently displayed interface
 unsigned long lastIfaceScrollMs = 0;
 
+// Pi system info (received via STATUS:SYS:)
+PiSysKV piSys[MAX_PI_SYS];
+int     piSysCount  = 0;
+unsigned long piSysMs = 0;    // millis() of last STATUS:SYS (0 = never)
+
+// System Info screen page: 0 = ESP32, 1 = Raspberry Pi
+int     advInfoPage = 0;
+
 // -----------------------------------------------------------
 //  Menu indices
 // -----------------------------------------------------------
@@ -145,6 +153,12 @@ char  espIP[24]    = "---";
 bool  espConnected = false;
 int   espMenuIndex = 0;
 int   espActiveSlot = -1;   // NVS slot ESP is connected on (-1=none)
+bool  espConnecting     = false;  // non-blocking STA connect in progress
+int   espConnSlot       = -1;     // NVS slot being tried
+int   espConnResult     = 0;      // last attempt: 0 none, 1 ok, 2 failed
+char  espConnTarget[33] = "";     // SSID being tried / last tried
+volatile int  pendingEspConnect = -1;   // NVS slot to connect from web (-1 = none)
+volatile bool pendingEspDisconnect = false;
 
 // Pending Install-on-Pi request — set by web handler (HTTP task),
 // cleared + executed in loop() (Arduino task).
@@ -450,12 +464,30 @@ static void _loopBody() {
   if (currentState == STATE_ESP_SCAN) pollWifiScan();
   if (currentState == STATE_PI_SCAN)  pollPiScan();
   pollApClients();
+  pollAdvInfo();
 
   // Install-on-Pi requested from web UI (set by handleApiInstallOnPi)
   if (pendingPiInstall) {
     pendingPiInstall = false;
     hidInstallOnPi();
   }
+
+  // ESP Wi-Fi connect / disconnect requested from web UI. Deferred so
+  // the HTTP response is sent before the radio changes mode.
+  if (pendingEspConnect >= 0) {
+    int slot = pendingEspConnect;
+    pendingEspConnect = -1;
+    wifiConnectSlot(slot);
+    drawStatusBar();
+    gfx->flush();
+  }
+  if (pendingEspDisconnect) {
+    pendingEspDisconnect = false;
+    wifiDisconnect();
+    drawStatusBar();
+    gfx->flush();
+  }
+  wifiService();   // completes a non-blocking STA connect
 
   // AP start requested from web UI (set by handleApiApStart)
   if (pendingApStart >= 0) {

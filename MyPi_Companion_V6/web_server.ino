@@ -23,6 +23,11 @@
 //    POST /api/nvssave        — save NVS slot (ESP + Pi profile)
 //    POST /api/nvsdel         — delete NVS slot
 //    POST /api/nvsconnect     — tell Pi to connect NVS slot
+//    POST /api/espconnect     — connect the ESP itself (slot, or ssid+pass) [deferred]
+//    POST /api/espdisconnect  — drop the ESP STA link [deferred]
+//    GET  /api/espstatus      — JSON: ESP STA state + last connect result
+//    POST /api/espscan        — start async SSID scan on the ESP
+//    GET  /api/espscan        — JSON: scan results (running flag + list)
 //    GET  /terminal           — xterm.js terminal page
 //    GET  /macros             — GUI macro & menu editor
 //    GET  /update             — OTA firmware upload page
@@ -139,6 +144,16 @@ void handleStatus() {
   server.send(200, "application/json", json);
 }
 
+// Append s to json with JSON string escaping (no surrounding quotes)
+static void _jsonAppendEsc(String &json, const char *s) {
+  for (; *s; s++) {
+    char c = *s;
+    if (c == '"' || c == '\\') { json += '\\'; json += c; }
+    else if ((uint8_t)c < 0x20) json += ' ';
+    else json += c;
+  }
+}
+
 void handleApiInfo() {
   unsigned long ms = millis();
   String json = "{";
@@ -164,7 +179,17 @@ void handleApiInfo() {
   }
   json += ",\"fw_version\":\"" FW_VERSION "\"";
   json += ",\"fw_date\":\""; json += dateBuf; json += "\"";
-  json += "}";
+  // Pi system info (STATUS:SYS) — every key the daemon sent, in its order
+  json += ",\"pi_sys_age\":";
+  json += piSysMs ? (long)((millis() - piSysMs) / 1000) : -1L;
+  json += ",\"pi_sys\":[";
+  for (int i = 0; i < piSysCount; i++) {
+    if (i) json += ',';
+    json += "[\""; _jsonAppendEsc(json, piSys[i].key);
+    json += "\",\""; _jsonAppendEsc(json, piSys[i].val);
+    json += "\"]";
+  }
+  json += "]}";
   server.send(200, "application/json", json);
 }
 
@@ -385,6 +410,108 @@ void handleApiNvsConnect() {
   Serial.println(p.dns);
   server.send(200, "text/plain",
               String("Connecting: ") + p.ssid + " (slot " + (slot + 1) + ")");
+}
+
+
+// ============================================================
+//  ESP STA CONNECT (web)  — connects the ESP itself, unlike
+//  /api/nvsconnect which asks the Pi to join a network.
+// ============================================================
+
+// POST /api/espconnect  slot=N            → connect saved NVS slot N (0-based)
+//                       ssid=..&pass=..   → save to NVS (same SSID slot,
+//                                           else first free, else last) then connect
+void handleApiEspConnect() {
+  if (espConnecting || pendingEspConnect >= 0) {
+    server.send(409, "text/plain", "ERR: a connect is already in progress"); return;
+  }
+  int slot = -1;
+  if (server.hasArg("ssid") && server.arg("ssid").length() > 0) {
+    String ssid = server.arg("ssid");
+    String pass = server.arg("pass");
+    if (ssid.length() > 32) { server.send(400, "text/plain", "ERR: SSID too long"); return; }
+    if (pass.length() > 0 && (pass.length() < 8 || pass.length() > 63)) {
+      server.send(400, "text/plain", "ERR: password must be 8-63 chars (or empty for open)"); return;
+    }
+    for (int i = 0; i < MAX_NVS_SLOTS && slot < 0; i++)
+      if (nvsProfiles[i].valid && ssid == nvsProfiles[i].ssid) slot = i;
+    for (int i = 0; i < MAX_NVS_SLOTS && slot < 0; i++)
+      if (!nvsProfiles[i].valid) slot = i;
+    if (slot < 0) slot = MAX_NVS_SLOTS - 1;
+    saveNvsSlot(slot, ssid.c_str(), pass.c_str(),
+                true /*dhcp*/, "", "255.255.255.0", "", "");
+    loadNvsProfiles();
+  } else {
+    slot = server.arg("slot").toInt();
+    if (!server.hasArg("slot") || slot < 0 || slot >= MAX_NVS_SLOTS || !nvsProfiles[slot].valid) {
+      server.send(400, "text/plain", "ERR: invalid or empty slot"); return;
+    }
+  }
+  pendingEspConnect = slot;   // processed in loop() after this reply is sent
+  String j = "{\"ok\":true,\"slot\":"; j += slot;
+  j += ",\"ssid\":\""; _jsonAppendEsc(j, nvsProfiles[slot].ssid); j += "\"}";
+  server.send(200, "application/json", j);
+}
+
+// POST /api/espdisconnect
+void handleApiEspDisconnect() {
+  if (!apRunning) {
+    // Without the AP the STA link is the only way to reach this page.
+    server.send(409, "text/plain", "ERR: AP not running - disconnecting would cut this page off");
+    return;
+  }
+  pendingEspDisconnect = true;
+  server.send(200, "application/json", "{\"ok\":true}");
+}
+
+// GET /api/espstatus
+void handleApiEspStatus() {
+  String j = "{";
+  j += "\"connected\":";  j += espConnected ? "true" : "false";
+  j += ",\"connecting\":"; j += (espConnecting || pendingEspConnect >= 0) ? "true" : "false";
+  j += ",\"ssid\":\"";    _jsonAppendEsc(j, espConnected ? espSSID : ""); j += "\"";
+  j += ",\"ip\":\"";      j += espConnected ? espIP : ""; j += "\"";
+  j += ",\"slot\":";      j += espActiveSlot;
+  j += ",\"rssi\":";      j += espConnected ? (int)WiFi.RSSI() : 0;
+  j += ",\"channel\":";   j += (int)WiFi.channel();
+  j += ",\"target\":\"";  _jsonAppendEsc(j, espConnTarget); j += "\"";
+  j += ",\"result\":";    j += espConnResult;   // 0 none, 1 ok, 2 failed
+  j += ",\"ap\":";        j += apRunning ? "true" : "false";
+  j += ",\"via_ap\":";    // is this request coming in over the AP?
+  j += (apRunning && server.client().localIP() == WiFi.softAPIP()) ? "true" : "false";
+  j += "}";
+  server.send(200, "application/json", j);
+}
+
+// POST /api/espscan — start; GET /api/espscan — results
+void handleApiEspScanStart() {
+  if (espConnecting) { server.send(409, "text/plain", "ERR: busy connecting"); return; }
+  if (WiFi.scanComplete() != WIFI_SCAN_RUNNING) {
+    WiFi.scanDelete();
+    wifiScanStart();
+  }
+  server.send(200, "application/json", "{\"ok\":true}");
+}
+
+void handleApiEspScanGet() {
+  int n = WiFi.scanComplete();
+  String j = "{\"running\":";
+  j += (n == WIFI_SCAN_RUNNING) ? "true" : "false";
+  j += ",\"list\":[";
+  bool first = true;
+  for (int i = 0; i < n && i < 30; i++) {
+    String ss = WiFi.SSID(i);
+    if (ss.length() == 0) continue;   // hidden networks: type the SSID manually
+    if (!first) j += ",";
+    first = false;
+    j += "{\"ssid\":\""; _jsonAppendEsc(j, ss.c_str());
+    j += "\",\"rssi\":"; j += WiFi.RSSI(i);
+    j += ",\"ch\":";     j += WiFi.channel(i);
+    j += ",\"open\":";   j += (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? "true" : "false";
+    j += "}";
+  }
+  j += "]}";
+  server.send(200, "application/json", j);
 }
 
 
@@ -751,11 +878,23 @@ static void handleRigsetupStatus() {
 // ============================================================
 static bool _webServerRunning = false;
 
+static bool _routesRegistered = false;
+
 void startWebServer() {
   if (_webServerRunning) return;
 
   wsServer.begin();
   wsServer.onEvent(webSocketEvent);
+
+  // server.stop() keeps the handler list, so register routes only once.
+  // Re-registering on every AP/STA restart duplicated every handler and
+  // leaked heap each cycle.
+  if (_routesRegistered) {
+    server.begin();
+    _webServerRunning = true;
+    return;
+  }
+  _routesRegistered = true;
 
   // ── Pages ──────────────────────────────────────────────────
   server.on("/",            handleRoot);
@@ -782,6 +921,11 @@ void startWebServer() {
   server.on("/api/nvssave",       HTTP_POST, handleApiNvsSave);
   server.on("/api/nvsdel",        HTTP_POST, handleApiNvsDel);
   server.on("/api/nvsconnect",    HTTP_POST, handleApiNvsConnect);
+  server.on("/api/espconnect",    HTTP_POST, handleApiEspConnect);
+  server.on("/api/espdisconnect", HTTP_POST, handleApiEspDisconnect);
+  server.on("/api/espstatus",     HTTP_GET,  handleApiEspStatus);
+  server.on("/api/espscan",       HTTP_POST, handleApiEspScanStart);
+  server.on("/api/espscan",       HTTP_GET,  handleApiEspScanGet);
 
   // ── Quick buttons ──────────────────────────────────────────
   server.on("/api/quickbtns",       HTTP_GET,  handleGetQuickBtns);
@@ -1034,7 +1178,9 @@ void startAP(int profileSlot) {
   if (_natActive) _apSetNapt(false);
 
   bool uplink = espConnected && _staUplink();
-  WiFi.mode(espConnected ? WIFI_AP_STA : WIFI_AP);
+  // Keep STA enabled while connected OR while a connect is in progress,
+  // otherwise starting the AP would silently kill the STA attempt.
+  WiFi.mode((espConnected || espConnecting) ? WIFI_AP_STA : WIFI_AP);
   WiFi.setSleep(false);   // re-assert: STA modem sleep throttles NAT traffic
 
   // The ESP32-S3 has one radio, so AP and STA must share a channel.
@@ -1077,7 +1223,7 @@ void stopAP() {
   _natWanted = false;
   strlcpy(_natStatus, "off", sizeof(_natStatus));
   WiFi.softAPdisconnect(true);
-  if (espConnected) {
+  if (espConnected || espConnecting) {
     WiFi.mode(WIFI_STA);
   } else {
     if (_webServerRunning) {

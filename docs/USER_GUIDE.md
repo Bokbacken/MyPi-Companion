@@ -232,7 +232,9 @@ a network that the ESP already knows.
 
 Lists the 10 NVS slots, followed by **ESP Scan…**, **Pi Scan…** and **Back**.
 
-- **Select a filled slot**: the ESP connects to that network.
+- **Select a filled slot**: the ESP starts connecting to that network. The status bar shows
+  `joining..` with the SSID until it is connected (or the attempt times out). The screen
+  stays responsive meanwhile, and a running AP stays up.
 - **ESP Scan…**: the ESP scans with its own radio. It lists up to 20 SSIDs, **2.4 GHz
   only** (the ESP32-S3 has no 5 GHz radio).
 - **Pi Scan…**: the Pi scans with `nmcli`, which finds **both 2.4 and 5 GHz** networks.
@@ -284,9 +286,22 @@ left to stop the AP.** Tap the header to hide the page; the AP keeps running (se
 
 ### System info
 
-Shows the firmware version and build date (e.g. `6.2` and the compile date), uptime,
+Two pages. Tap right (or swipe right/up/down) to switch page; tap left to go back.
+
+**ESP32 Info** — firmware version and build date (e.g. `6.3` and the compile date), uptime,
 free heap, Pi link state, the Pi's USB port (e.g. `ttyACM0`), ESP IP, sketch size and
-free OTA space. The same version and build date are shown on the web page `/info`. Tap left or swipe left to go back.
+free OTA space.
+
+**Pi Info** — reported by the Pi daemon every poll: hostname, model, OS (codename and
+32/64-bit), kernel, daemon version, Pi uptime, CPU temperature (orange from 70 °C, red
+from 80 °C), load, RAM, disk (root file system), power (under-voltage / throttling, now or
+since boot), Wi-Fi signal (dBm) and whether the clock is NTP-synchronized. Values turn grey
+when the Pi link is offline or the data is older than 20 s.
+
+If the page says **daemon too old – reinstall**, the Pi runs a daemon from before v6.3:
+run Install CLI-Pi / Install GUI-Pi again (or reinstall from the `RIGSETUP` disk).
+
+The same information is shown on the web page `/info` (cards *ESP32* and *Raspberry Pi*).
 
 ---
 
@@ -374,6 +389,7 @@ Open one of these:
 |---|---|---|
 | Pi networks: switch the Pi's active Wi-Fi | Main Menu → Pi networks | `/networks` (alias `/pinetworks`) |
 | ESP Wi-Fi: manage slots, push to the Pi | Main Menu → ESP Wi-Fi / Local profiles | `/profiles` |
+| Connect the ESP to a network (scan, SSID, saved slot) | Main Menu → ESP Wi-Fi | `/profiles` → **ESP32 Wi-Fi Connection**, or **ESP** on a slot |
 | Install on Pi | Advanced → Install CLI-Pi / Install GUI-Pi | `/installonpi` (Desktop and CLI) |
 | AP mode | Advanced → Start AP | `/ap-profiles` (edit and start) |
 | AP start on boot | Advanced → Boot AP | `/ap-profiles` → **Start on boot** / **Hide on boot** |
@@ -398,6 +414,11 @@ Open one of these:
 | GET | `/connect?profile=<name>` | Tells the Pi to connect to a named NM connection |
 | GET | `/api/piconns` | JSON array of the Pi's NM connection names |
 | GET | `/api/nvs` | JSON of all 10 NVS slots |
+| POST | `/api/espconnect` | Connect the ESP itself: `slot=<0-9>`, or `ssid=…&pass=…` (saved to a slot first) |
+| GET | `/api/espstatus` | ESP Wi-Fi state: connected / connecting, SSID, IP, dBm, channel, last result |
+| POST/GET | `/api/espscan` | Start an ESP scan / read the results |
+| POST | `/api/espdisconnect` | Drop the ESP's Wi-Fi link (only while the AP runs) |
+| GET | `/api/info` | System info JSON, incl. `pi_sys` (Pi key/value list) and `pi_sys_age` |
 | GET | `/api/installstatus` | Live install progress (polled by `/installonpi`) |
 | GET | `/api/sd/status` | SD card status (present, shared, …) |
 | — | `/api/rigsetup/*` | Manages the `RIGSETUP` USB disk shown to the Pi |
@@ -567,13 +588,32 @@ connects. To make a network the preferred one, move it to a lower slot number on
 
 The same slots are used in two directions:
 
-- **For the ESP itself:** auto-connect at boot, or a manual connect from *ESP Wi-Fi*.
-- **For the Pi:** *Local profiles (→ Pi Profile)* on the touch screen, or the push button
+- **For the ESP itself:** auto-connect at boot, a manual connect from *ESP Wi-Fi*, or the
+  **ESP** button / *ESP32 Wi-Fi Connection* card on `/profiles`.
+- **For the Pi:** *Local profiles (→ Pi Profile)* on the touch screen, or the **Pi** button
   on `/profiles`, sends a slot's full settings to the Pi with `CMD:ADDWIFI_FULL`. The Pi
   saves it as a NetworkManager connection.
 
 New networks entered with the keyboard (from ESP Scan or Pi Scan) are saved to a slot,
 so they become available for both.
+
+### Connecting the ESP from the web
+
+On `/profiles`, the card **ESP32 Wi-Fi Connection** shows the ESP's own link (updated
+automatically). **Scan** lists the networks the ESP sees (2.4 GHz only); tap one, enter the
+password and press **Connect ESP to this SSID**. The network is saved to a slot (an existing
+slot with the same SSID is reused, else the first free slot, else slot 10) and the ESP joins it.
+A saved slot can also be joined with its **ESP** button.
+
+Things to know:
+
+- **With the AP running** (for example AP on boot), the AP stays up. The ESP has one radio,
+  so the AP moves to the channel of the joined network; AP clients may drop for a few
+  seconds and then reconnect. NAT starts automatically once the uplink is up.
+- **Without the AP**, if you reached the page over the ESP's current Wi-Fi, the page is cut
+  off when the ESP switches network. Reopen it on the new IP (status bar) or
+  `http://rigconsole.local/`.
+- **Disconnect ESP** is only offered while the AP runs, so you cannot lock yourself out.
 
 ---
 

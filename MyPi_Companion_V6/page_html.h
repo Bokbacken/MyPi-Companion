@@ -378,8 +378,45 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 <div class="row"><span class="k">ESP network</span><span class="v" id="esp-ssid">---</span></div>
 <div class="row"><span class="k">ESP IP</span><span class="v" id="esp-ip">---</span></div>
 </div>
+<div class="card">
+<h2>Raspberry Pi</h2>
+<div id="pi-sys"><div class="row"><span class="k">No data yet</span><span class="v">---</span></div></div>
+</div>
 <footer><a href="/" style="color:#484f58">MyPi Companion</a></footer>
 <script>
+// STATUS:SYS keys → label + formatter; keys not listed here are shown raw
+var SYS={
+ host:['Hostname',function(v){return v},'acc'],
+ model:['Model'],os:['OS'],code:null,
+ arch:['Architecture'],kernel:['Kernel'],daemon:['Daemon',function(v){return 'v'+v}],
+ up:['Uptime',function(v){v=+v;var d=Math.floor(v/86400),h=Math.floor(v/3600)%24,m=Math.floor(v/60)%60;return (d?d+'d ':'')+h+'h '+('0'+m).slice(-2)+'m'}],
+ temp:['CPU temp',function(v){return v+' °C'},function(v){return v>=80?'off':v>=70?'acc':''}],
+ load:['Load (1 min)'],
+ mem:['RAM used',function(v){return v+' MB'}],
+ disk:['Disk / used',function(v){return v+' GB'}],
+ thr:['Power',function(v){var f=parseInt(v,16);return f&1?'UNDER-VOLTAGE now':f&14?'THROTTLED now':f&0x10000?'Under-voltage since boot':f&0xE0000?'Throttled since boot':'OK'},
+      function(v){var f=parseInt(v,16);return f&15?'off':f&0xF0000?'acc':'on'}],
+ wifi:['Wi-Fi signal',function(v){return v+' dBm'},function(v){return v<=-80?'off':v<=-70?'acc':''}],
+ ntp:['Clock',function(v){return v=='yes'?'NTP synced':'Not synced'},function(v){return v=='yes'?'':'acc'}]
+};
+function esc(t){return String(t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function renderSys(d){
+  var el=document.getElementById('pi-sys'),h='';
+  if(!d.pi_sys||!d.pi_sys.length){
+    h='<div class="row"><span class="k">'+(d.pi_connected?'Daemon too old — reinstall on the Pi':'Pi offline')+'</span><span class="v">---</span></div>';
+  }else{
+    var stale=!d.pi_connected||d.pi_sys_age>20;
+    d.pi_sys.forEach(function(kv){
+      var k=kv[0],v=kv[1],m=SYS[k];
+      if(m===null)return;
+      var lab=m?m[0]:k,txt=m&&m[1]?m[1](v):v,cls=m&&m[2]?(typeof m[2]=='function'?m[2](v):m[2]):'';
+      if(stale)cls='';
+      h+='<div class="row"><span class="k">'+esc(lab)+'</span><span class="v '+cls+'">'+esc(txt)+'</span></div>';
+    });
+    if(stale)h+='<div class="row"><span class="k off">Stale data</span><span class="v">'+(d.pi_sys_age>=0?d.pi_sys_age+' s old':'')+'</span></div>';
+  }
+  el.innerHTML=h;
+}
 function fmtUptime(ms){
   var s=Math.floor(ms/1000),m=Math.floor(s/60),h=Math.floor(m/60);
   s%=60;m%=60;
@@ -407,6 +444,7 @@ function poll(){
     set('pi-ip',   d.pi_ip||'---');
     set('esp-ssid', d.esp_ssid||'---', d.esp_connected?'acc':'');
     set('esp-ip',  d.esp_ip||'---');
+    renderSys(d);
   }).catch(function(){
     document.getElementById('ts').textContent='Error fetching data';
   });
