@@ -502,33 +502,12 @@ footer{text-align:center;padding:10px;font-size:11px;color:#484f58}
 </div>
 <footer><a href="/" style="color:#484f58">MyPi Companion</a></footer>
 <script>
-var _poll=null,_lastStep=-1;
-
-function _stopPoll(){if(_poll){clearInterval(_poll);_poll=null;}}
-
-// Poll /api/otaprogress every 500 ms; update bar at each 5 % step.
-function _startPoll(onDone,onErr){
-  _lastStep=-1;
-  _poll=setInterval(function(){
-    fetch('/api/otaprogress').then(function(r){return r.json();}).then(function(d){
-      var bar=document.getElementById('bar');
-      var pct=document.getElementById('pct');
-      if(d.pct>=0){
-        var step=Math.floor(d.pct/5);
-        if(step!==_lastStep){
-          _lastStep=step;
-          bar.value=d.pct;
-          pct.textContent=(d.pct<100?'Flashing: ':'Done: ')+d.pct+'%';
-        }
-      }
-      if(!d.busy){
-        _stopPoll();
-        if(d.err)onErr(d.err); else onDone();
-      }
-    }).catch(function(){/* ESP busy mid-chunk — ignore poll miss */});
-  },500);
-}
-
+// OTA upload progress driven by XHR upload events.
+// Rationale: the ESP32 sync WebServer is blocked during the multipart POST and
+// cannot answer /api/otaprogress GET requests while writing chunks to flash.
+// XHR upload.onprogress fires independently of server responses; since the ESP32
+// writes to flash on each received chunk, upload bytes ~= flash bytes => accurate
+// progress without polling.  /api/otaprogress is retained on the server for debug.
 document.getElementById('upf').onsubmit=function(e){
   e.preventDefault();
   var f=document.getElementById('fw').files[0];
@@ -539,37 +518,29 @@ document.getElementById('upf').onsubmit=function(e){
   document.getElementById('upbtn').disabled=true;
   document.getElementById('progress').style.display='block';
   res.style.display='none';
-  bar.value=0; pct.textContent='Uploading…';
+  bar.value=0;pct.textContent='Uploading...';
 
   function showOk(){
     document.getElementById('upbtn').disabled=false;
-    res.style.display='block'; res.className='result ok';
+    res.style.display='block';res.className='result ok';
     res.textContent='Flash successful! Device is rebooting...';
-    bar.value=100; pct.textContent='Done!';
+    bar.value=100;pct.textContent='Done!';
   }
   function showErr(msg){
     document.getElementById('upbtn').disabled=false;
-    res.style.display='block'; res.className='result err';
+    res.style.display='block';res.className='result err';
     res.textContent=msg;
-    _stopPoll();
   }
 
-  // Start server-side progress polling right away.
-  // The ESP32 may miss some polls while writing a chunk, that is fine.
-  _startPoll(showOk,function(e){showErr('Flash error: '+e);});
-
   var xhr=new XMLHttpRequest();
-  // Show upload progress until server starts reporting (first poll reply ≥ 0).
   xhr.upload.onprogress=function(ev){
-    if(ev.lengthComputable&&_lastStep<0){
+    if(ev.lengthComputable){
       var p=Math.round(ev.loaded/ev.total*100);
-      bar.value=p; pct.textContent='Uploading: '+p+'%';
+      bar.value=p;
+      pct.textContent=p<100?'Flashing: '+p+'%':'Verifying...';
     }
   };
   xhr.onload=function(){
-    // XHR done: server replied 200 (reboot) or error.
-    // The poll loop handles the normal 200 path; handle error here too.
-    _stopPoll();
     if(xhr.status===200){showOk();}
     else{showErr('Error '+xhr.status+': '+xhr.responseText);}
   };
