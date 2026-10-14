@@ -700,13 +700,15 @@ offline `pyserial` wheel, so the install works without internet access.
 
 **Macros** are saved shell commands that are sent to the Pi terminal.
 
-- Up to **24 macros**
-- Each has a **name** (up to 24 characters) and a **command** (up to 160 characters)
+- Up to **200 macros** in the pool (stored in `/config/macros.json` on the ESP's flash)
+- Each has a **name** (up to 24 characters) and a **command** (up to 200 characters)
 - Manage them on **`/macros`**. You can also import and export them as JSON; examples
   are in [`examples/`](../examples/).
 
 **Quick-action buttons** on the home page (`/`) and in the terminal are linked to macro
 slots. Clicking a button sends that macro's command to the Pi.
+
+- Up to **25 quick-button slots** (stored in NVS, survive firmware updates)
 
 There are three ways to run a macro:
 

@@ -238,9 +238,12 @@ enum TouchAction {
 // -----------------------------------------------------------
 //  Terminal macros
 // -----------------------------------------------------------
-#define MAX_MACROS      24
-#define MACRO_NAME_LEN  25    // 24 displayable chars + null
-#define MACRO_CMD_LEN  161    // 160 chars + null
+// The macro pool lives in /config/macros.json on FFat and is managed
+// entirely client-side (web JS).  The hard cap in the web UI is 200.
+// MAX_MACROS is retained for the touch-screen macro picker only.
+#define MAX_MACROS      200   // web UI cap (macros.json)
+#define MACRO_NAME_LEN   25   // 24 displayable chars + null
+#define MACRO_CMD_LEN   201   // 200 chars + null
 
 struct TermMacro {
   char name[MACRO_NAME_LEN];
