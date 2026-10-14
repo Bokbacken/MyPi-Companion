@@ -187,7 +187,7 @@ struct PiIface {
 // AP client host-name cache (client_names.ino)
 #define CN_MAX       10             // AP max clients
 #define CN_NAME_LEN  24
-enum { CN_SRC_NONE = 0, CN_SRC_PI, CN_SRC_MDNS, CN_SRC_NBNS };
+enum { CN_SRC_NONE = 0, CN_SRC_PI, CN_SRC_MDNS, CN_SRC_NBNS, CN_SRC_DHCP };
 struct ClientName {
   uint8_t  mac[6];
   uint32_t ip;                      // lwIP order (esp_ip4_addr_t.addr), 0 = none yet

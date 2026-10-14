@@ -1286,6 +1286,7 @@ void handleApiApStatus() {
     }
   }
   j += "]";
+  j += ",\"dhcpNamesSeen\":" + String(clientNameDhcpSeen());   // DHCP requests with a host name
   j += ",\"natWanted\":" + String(_natWanted ? "true" : "false");
   j += ",\"natActive\":" + String(_natActive ? "true" : "false");
   j += ",\"natStatus\":\"" + String(_natStatus) + "\"";

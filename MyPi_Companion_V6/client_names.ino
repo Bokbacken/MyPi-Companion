@@ -1,23 +1,31 @@
 // ============================================================
 //  client_names.ino — host names for AP clients
 //
-//  The DHCP server in ESP-IDF does not keep the hostname a client
-//  sends (option 12), so names are looked up after the client has
-//  an IP:
+//  Sources, best first:
 //   1. Pi match     — client IP equals one of the Pi's interface IPs
 //                     → hostname from STATUS:SYS (no network traffic)
-//   2. mDNS reverse — unicast PTR query "d.c.b.a.in-addr.arpa" to
+//   2. DHCP sniff   — the ESP-IDF DHCP server drops the hostname a
+//                     client sends (option 12 / 81), so the AP netif's
+//                     input function is wrapped and DHCP requests are
+//                     read on their way in (Android "send device name",
+//                     Windows, most Linux). Seen at connect and renewal.
+//   3. mDNS reverse — unicast PTR query "d.c.b.a.in-addr.arpa" to
 //                     client:5353 from a non-5353 port (RFC 6762 §6.7
 //                     legacy unicast; answered by Avahi/Linux, macOS,
 //                     iOS, Windows 10+)
-//   3. NetBIOS      — NBSTAT query to client:137 (Windows, Samba)
+//   4. NetBIOS      — NBSTAT query to client:137 (Windows, Samba)
 //  Both network queries go out together from one UDP socket and are
 //  retried with back-off. Everything is non-blocking.
 // ============================================================
 
+#include <WiFi.h>
 #include <WiFiUdp.h>
 #include <esp_wifi.h>
 #include <esp_wifi_ap_get_sta_list.h>
+#include <esp_netif.h>
+#include <esp_netif_net_stack.h>
+#include <lwip/netif.h>
+#include <lwip/pbuf.h>
 
 // ClientName, CN_MAX, CN_NAME_LEN, CN_SRC_* are in config.h (the
 // Arduino prototype generator needs the type before this file).
@@ -55,6 +63,120 @@ static void _cnSetName(ClientName *c, const char *raw, uint8_t src) {
   c->src = src;
 }
 
+// ── DHCP hostname sniffer ────────────────────────────────────
+// Written from the Wi-Fi driver task (netif input), read from loop()
+// → guarded by a spinlock. Keyed by MAC; survives lease changes.
+
+struct DhcpName { uint8_t mac[6]; char name[CN_NAME_LEN]; bool used; };
+static DhcpName      _dn[CN_MAX];
+static uint8_t       _dnNext = 0;              // ring replacement
+static portMUX_TYPE  _dnMux = portMUX_INITIALIZER_UNLOCKED;
+static volatile uint32_t _dnSeen = 0;          // DHCP requests seen (diagnostics)
+
+static struct netif  *_dnNetif     = nullptr;
+static netif_input_fn _dnOrigInput = nullptr;
+
+// Parse an Ethernet frame; if it is a client DHCP message carrying a
+// host name (option 12, else option 81 FQDN), copy MAC + raw name.
+// Pure function — also used by the host test.
+bool cnParseDhcpFrame(const uint8_t *f, int len, uint8_t mac[6], char *name, int nameLen) {
+  if (len < 14 + 20 + 8 + 240) return false;
+  if (f[12] != 0x08 || f[13] != 0x00) return false;          // IPv4
+  const uint8_t *ip = f + 14;
+  if ((ip[0] >> 4) != 4 || ip[9] != 17) return false;         // UDP
+  int ihl = (ip[0] & 0x0F) * 4;
+  if (ihl < 20 || 14 + ihl + 8 + 240 > len) return false;
+  const uint8_t *udp = ip + ihl;
+  if (udp[2] != 0 || udp[3] != 67) return false;              // dst port 67
+  const uint8_t *d = udp + 8;
+  int dlen = len - (int)(d - f);
+  if (d[0] != 1 || d[1] != 1 || d[2] != 6) return false;      // BOOTREQUEST, Ethernet
+  if (d[236] != 0x63 || d[237] != 0x82 || d[238] != 0x53 || d[239] != 0x63) return false;
+  const uint8_t *h12 = nullptr, *h81 = nullptr;
+  int l12 = 0, l81 = 0;
+  for (int o = 240; o < dlen; ) {
+    uint8_t t = d[o];
+    if (t == 255) break;
+    if (t == 0) { o++; continue; }
+    if (o + 1 >= dlen) break;
+    int l = d[o + 1];
+    if (o + 2 + l > dlen) break;
+    if (t == 12) { h12 = d + o + 2; l12 = l; }
+    if (t == 81 && l > 3) { h81 = d + o + 2; l81 = l; }
+    o += 2 + l;
+  }
+  int n = 0;
+  if (h12) {
+    for (int i = 0; i < l12 && n < nameLen - 1; i++) name[n++] = (char)h12[i];
+  } else if (h81) {
+    const uint8_t *s = h81 + 3; int sl = l81 - 3;              // skip flags, rcode1, rcode2
+    if (h81[0] & 0x04) {                                       // E bit: DNS wire format
+      for (int i = 0; i < sl && s[i]; ) {                      // first label only
+        int ll = s[i];
+        for (int k = 1; k <= ll && i + k < sl && n < nameLen - 1; k++) name[n++] = (char)s[i + k];
+        break;
+      }
+    } else {
+      for (int i = 0; i < sl && s[i] != '.' && n < nameLen - 1; i++) name[n++] = (char)s[i];
+    }
+  }
+  name[n] = 0;
+  if (n == 0) return false;
+  memcpy(mac, d + 28, 6);                                      // chaddr
+  return true;
+}
+
+// int8_t == err_t; spelled out so Arduino's auto-prototype compiles.
+static int8_t _dnInput(struct pbuf *p, struct netif *inp) {
+  if (p && p->len >= 14 + 20 + 8 + 240) {                      // Wi-Fi RX pbufs are contiguous
+    uint8_t mac[6];
+    char    raw[CN_NAME_LEN];
+    if (cnParseDhcpFrame((const uint8_t*)p->payload, p->len, mac, raw, sizeof(raw))) {
+      _dnSeen++;
+      taskENTER_CRITICAL(&_dnMux);
+      DhcpName *e = nullptr;
+      for (int i = 0; i < CN_MAX; i++)
+        if (_dn[i].used && memcmp(_dn[i].mac, mac, 6) == 0) { e = &_dn[i]; break; }
+      if (!e) { e = &_dn[_dnNext]; _dnNext = (_dnNext + 1) % CN_MAX; }
+      memcpy(e->mac, mac, 6);
+      memcpy(e->name, raw, CN_NAME_LEN);
+      e->used = true;
+      taskEXIT_CRITICAL(&_dnMux);
+    }
+  }
+  netif_input_fn orig = _dnOrigInput;
+  if (orig) return orig(p, inp);
+  pbuf_free(p);
+  return ERR_OK;
+}
+
+// (Re)install the wrapper on the current AP netif. Arduino may
+// recreate the netif when the AP restarts, so this is checked often.
+static void _dnHook() {
+  esp_netif_t *en = WiFi.AP.netif();
+  if (!en) en = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+  if (!en) return;
+  struct netif *n = (struct netif*)esp_netif_get_netif_impl(en);
+  if (!n || !n->input || n->input == _dnInput) return;
+  _dnOrigInput = n->input;                                     // set before the swap
+  n->input     = _dnInput;
+  _dnNetif     = n;
+  Serial.printf("[CN] DHCP hostname hook installed on %c%c%d\n", n->name[0], n->name[1], n->num);
+}
+
+static bool _dnLookup(const uint8_t *mac, char *out) {
+  bool ok = false;
+  taskENTER_CRITICAL(&_dnMux);
+  for (int i = 0; i < CN_MAX; i++)
+    if (_dn[i].used && memcmp(_dn[i].mac, mac, 6) == 0) {
+      memcpy(out, _dn[i].name, CN_NAME_LEN); ok = true; break;
+    }
+  taskEXIT_CRITICAL(&_dnMux);
+  return ok;
+}
+
+uint32_t clientNameDhcpSeen() { return _dnSeen; }
+
 // ── Public API ───────────────────────────────────────────────
 
 // Host name for a connected client, or nullptr if not (yet) known.
@@ -71,6 +193,7 @@ const char* clientNameSrc(const uint8_t *mac) {
     case CN_SRC_PI:   return "pi";
     case CN_SRC_MDNS: return "mdns";
     case CN_SRC_NBNS: return "netbios";
+    case CN_SRC_DHCP: return "dhcp";
   }
   return "";
 }
@@ -205,7 +328,8 @@ static void _cnPollReplies() {
     uint16_t port = _cnUdp.remotePort();
     for (int i = 0; i < CN_MAX; i++) {
       ClientName *c = &_cn[i];
-      if (!c->used || c->ip != from || c->src == CN_SRC_PI) continue;
+      if (!c->used || c->ip != from) continue;
+      if (c->src == CN_SRC_PI || c->src == CN_SRC_DHCP) break;
       if (port == 5353)     _cnParseMdns(c, buf, len);
       else if (port == 137) _cnParseNbns(c, buf, len);
       break;
@@ -234,6 +358,7 @@ void clientNameService() {
     for (int i = 0; i < CN_MAX; i++) _cn[i].used = false;
     return;
   }
+  _dnHook();
   if (!_cnUdpOpen) _cnUdpOpen = _cnUdp.begin(CN_LOCAL_PORT);
   if (_cnUdpOpen) _cnPollReplies();
 
@@ -278,6 +403,17 @@ void clientNameService() {
     // Pi hostname may arrive later than the lease; check every scan
     if (c->src == CN_SRC_NONE || c->src == CN_SRC_PI) {
       if (_cnTryPi(c)) continue;
+    }
+    // Name the client sent in its DHCP request (may arrive at renewal);
+    // beats mDNS/NetBIOS because the device chose it itself
+    {
+      char dn[CN_NAME_LEN];
+      if (_dnLookup(mac, dn)) {
+        ClientName tmp = *c;
+        _cnSetName(&tmp, dn, CN_SRC_DHCP);
+        if (tmp.src == CN_SRC_DHCP && strcmp(tmp.name, c->name) != 0) *c = tmp;
+        if (c->src == CN_SRC_DHCP) continue;
+      }
     }
     if (c->name[0] || sent || !_cnUdpOpen) continue;
     if ((int32_t)(now - c->nextMs) < 0) continue;

@@ -286,15 +286,24 @@ left to stop the AP.** Tap the header to hide the page; the AP keeps running (se
 
 Each client row shows the last IP octet and the best name the ESP can find:
 
-1. **Host name** — the companion Pi (its IP matches an interface the daemon reports),
-   or a device that answers an mDNS reverse lookup (Linux with Avahi, macOS, iOS,
-   Windows 10+) or a NetBIOS name query (Windows, Samba). Names usually appear a few
-   seconds after the client gets its IP. The ESP retries for devices that answer later.
+1. **Host name**, from the first source that has one:
+   - the companion Pi (its IP matches an interface the daemon reports);
+   - the name the device sends when it asks for an IP (DHCP). Windows always sends
+     it; Android sends it when *Send device name* is on in the Wi-Fi network
+     settings. The ESP only sees it when the device connects or renews its lease,
+     so a device that was already connected when the ESP started shows its name
+     after it reconnects;
+   - an mDNS reverse lookup (Linux with Avahi, macOS, iOS);
+   - a NetBIOS name query (Windows on a Private network, Samba).
+
+   Names usually appear a few seconds after the client gets its IP. The ESP retries
+   for devices that answer later.
 2. **Manufacturer** from the MAC address (Raspberry Pi, Apple, ...).
 3. **The last 3 bytes of the MAC.**
 
-Android phones and devices with a private (randomized) MAC usually answer neither
-lookup, so they show the MAC.
+Windows blocks mDNS and NetBIOS replies on networks marked *Public*, and Android
+does not answer either lookup, so for those devices the DHCP name is the one
+that works. A device that sends no DHCP name and answers no lookup shows the MAC.
 
 ### System info
 
