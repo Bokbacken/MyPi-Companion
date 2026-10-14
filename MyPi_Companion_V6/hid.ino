@@ -101,16 +101,20 @@ static void hidCancelLine() {
 //  hidSetStatus()  — update a status line on the display.
 //  line 0 = main status, line 1 = detail / path / countdown.
 // ----------------------------------------------------------
+// line 0 = main step shown in the toast bar (replaces the previous step).
+// line 1 = detail kept in hidStatusMsg[] only (web / debug); not drawn.
+// The blocking install loop owns the display; the content area stays black
+// from the updateContentArea() call made before hidInstallOnPi().
 static void hidSetStatus(uint8_t line, const char *msg, uint16_t col) {
   if (line < 2) {
     strlcpy(hidStatusMsg[line], msg, sizeof(hidStatusMsg[0]));
     hidStatusErr[line] = (col == COL_ERR);
   }
-  int16_t y = (line == 0) ? CONTENT_TOP + 20 : CONTENT_TOP + 40;
-  char buf[24];
-  snprintf(buf, sizeof(buf), "%-20s", msg);
-  drawTxt(buf, 4, y, col, COL_BG);
-  gfx->flush();
+  if (line == 0) {
+    // ttlMs=0: permanent until the next hidSetStatus(0,...) call or
+    // until toastInfo()/toastError() replaces it with a timed toast.
+    toastSet(msg, 0, col);
+  }
 }
 
 // ----------------------------------------------------------
@@ -494,6 +498,7 @@ void hidInstallOnPi() {
         else if (rxLine == "RIG:INSTALL_DONE") {
           hidSetStatus(0, "Done!",         COL_ACTIVE);
           hidSetStatus(1, "Connecting...", COL_DIM);
+          toastInfo("Install DONE");
           // CLI: unmount our manual mount and log out (typed ahead).
           if (cli) hidCliCleanup(mounted, weLoggedIn);
           hidWipePass();
@@ -519,6 +524,7 @@ void hidInstallOnPi() {
           snprintf(errBuf, sizeof(errBuf), "%.20s", rxLine.c_str() + 4);
           hidSetStatus(0, "ERR: install", COL_ERR);
           hidSetStatus(1, errBuf,         COL_ERR);
+          toastError("Install failed");
           if (cli) hidCliCleanup(mounted, weLoggedIn);
           hidWipePass();
           mscEject();

@@ -280,9 +280,30 @@ the **Start on boot** checkbox on `/ap-profiles`.
 ### AP active
 
 Shown while the access point is running. It displays the AP SSID, password, the IP of
-the web interface, NAT status and the number of connected clients. **Tap left or swipe
+the web interface, NAT status and the connected clients (up to 4 rows). **Tap left or swipe
 left to stop the AP.** Tap the header to hide the page; the AP keeps running (see
 [section 9](#hiding-and-showing-the-ap-page)).
+
+Each client row shows the last IP octet and the best name the ESP can find:
+
+1. **Host name**, from the first source that has one:
+   - the companion Pi (its IP matches an interface the daemon reports);
+   - the name the device sends when it asks for an IP (DHCP). Windows always sends
+     it; Android sends it when *Send device name* is on in the Wi-Fi network
+     settings. The ESP only sees it when the device connects or renews its lease,
+     so a device that was already connected when the ESP started shows its name
+     after it reconnects;
+   - an mDNS reverse lookup (Linux with Avahi, macOS, iOS);
+   - a NetBIOS name query (Windows on a Private network, Samba).
+
+   Names usually appear a few seconds after the client gets its IP. The ESP retries
+   for devices that answer later.
+2. **Manufacturer** from the MAC address (Raspberry Pi, Apple, ...).
+3. **The last 3 bytes of the MAC.**
+
+Windows blocks mDNS and NetBIOS replies on networks marked *Public*, and Android
+does not answer either lookup, so for those devices the DHCP name is the one
+that works. A device that sends no DHCP name and answers no lookup shows the MAC.
 
 ### System info
 
@@ -403,7 +424,7 @@ Open one of these:
 | `/terminal` | xterm.js terminal on the Pi's bash. Each browser tab gets its own session (up to 4); command history is shared between tabs (Ctrl+Up/Down) |
 | `/macros` | Manage terminal macros and quick-action buttons |
 | `/storage` | File manager for internal flash and the SD card |
-| `/ap-profiles` | Edit the 4 AP profiles (name, SSID, password, subnet, NAT, start on boot, hide on boot). The status table lists each connected AP client with the last IP octet (e.g. `.2`), the manufacturer when known (Raspberry Pi, Apple, …) or the end of its MAC, and the full MAC |
+| `/ap-profiles` | Edit the 4 AP profiles (name, SSID, password, subnet, NAT, start on boot, hide on boot). The status table lists each connected AP client with the last IP octet (e.g. `.2`), the manufacturer when known (Raspberry Pi, Apple, …) or the end of its MAC, and the full MAC. A host name, when found, replaces the manufacturer (which moves into brackets); hover the MAC to see how the name was found |
 | `/update` | OTA firmware update |
 
 ### API endpoints (for scripts)

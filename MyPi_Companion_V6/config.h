@@ -9,7 +9,7 @@
 // -----------------------------------------------------------
 //  Firmware version
 // -----------------------------------------------------------
-#define FW_VERSION    "6.3"
+#define FW_VERSION    "6.3.2"
 // __DATE__ = "Oct 13 2026" (compiler-injected, MMM DD YYYY)
 // Reformatted to "DD Mon YYYY" at runtime (see display.ino / web_server.ino)
 
@@ -60,6 +60,13 @@
 // Compact menu row — single-line text + minimal padding
 #define MENU_ROW_H     18     // 8 px text + 5 px top + 5 px bottom
 #define ADV_MENU_COUNT  7     // Advanced menu: AP, info, install CLI, install GUI, flip, AP on boot, back
+
+// ── Toast overlay (action-feedback strip at the bottom of the content area)
+// All action feedback (web commands, daemon OK:/ERR: replies, install results)
+// MUST go through toastInfo() / toastError() defined in display.ino.
+// The status bar (drawStatusBar) is reserved for connectivity state only.
+#define TOAST_Y   (STATUS_TOP - 15)  // y=221 — bottom strip of content area
+#define TOAST_H    14                // 8 px text + 3 px top/bottom padding
 
 // Status bar pixel offsets from STATUS_TOP
 #define SB_ESP_IP    14   // ESP IP address  (textSize 2, 16 px)
@@ -182,6 +189,21 @@ struct PiProfile {
 struct PiIface {
   char name[PI_IFACE_NAME_LEN];     // e.g. "eth0" or "wlan0"
   char ip[16];                      // e.g. "192.168.1.5"
+};
+
+// AP client host-name cache (client_names.ino)
+#define CN_MAX       10             // AP max clients
+#define CN_NAME_LEN  24
+enum { CN_SRC_NONE = 0, CN_SRC_PI, CN_SRC_MDNS, CN_SRC_NBNS, CN_SRC_DHCP };
+struct ClientName {
+  uint8_t  mac[6];
+  uint32_t ip;                      // lwIP order (esp_ip4_addr_t.addr), 0 = none yet
+  char     name[CN_NAME_LEN];
+  uint8_t  src;                     // CN_SRC_*
+  uint8_t  tries;
+  uint16_t qid;                     // DNS id of the last mDNS query
+  uint32_t nextMs;
+  bool     used;
 };
 
 // Pi system info (STATUS:SYS:k=v|k=v…) — generic key/value table so the

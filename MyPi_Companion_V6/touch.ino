@@ -579,11 +579,10 @@ void doSelect() {
         goBack();
       } else if (nvsProfiles[nvsMenuIndex].valid) {
         NvsProfile &p = nvsProfiles[nvsMenuIndex];
-        // Pending feedback until OK/ERR:ADDWIFI_FULL arrives ("\x84" = 'ä' in the CP437 GFX font)
+        // Pending feedback until OK/ERR:ADDWIFI_FULL replaces it ("\x84" = 'ä' in the CP437 GFX font).
+        // 30 s TTL: nmcli can be slow.
         hasError = false;
-        hasInfo  = true;
-        infoExpireMs = millis() + 30000UL;   // nmcli can be slow; give up after 30 s
-        strlcpy(infoMsg, "L\x84gger till WiFi...", sizeof(infoMsg));
+        toastSet("L\x84gger till WiFi...", 30000UL, COL_ACCENT);
         Serial.print("CMD:ADDWIFI_FULL:");
         Serial.print(p.ssid);            Serial.print("|");
         Serial.print(p.pass);            Serial.print("|");
@@ -991,5 +990,6 @@ void updateContentArea() {
   }
 
   drawStatusBar();
+  toastRedraw();        // keep a live toast visible across page changes
   gfx->flush();
 }

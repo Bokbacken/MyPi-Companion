@@ -185,7 +185,7 @@ void processMsg(const String& msg) {
   if (msg.startsWith("ERR:CONNECT:")) {
     hasError = true;
     snprintf(lastErrMsg, sizeof(lastErrMsg), "ERR: %s", msg.substring(12).c_str());
-    if (currentState == STATE_STATUS) { drawHomeContent(); gfx->flush(); }
+    toastError(lastErrMsg);
     return;
   }
 
@@ -199,7 +199,7 @@ void processMsg(const String& msg) {
   if (msg.startsWith("ERR:ADDWIFI:")) {
     hasError = true;
     snprintf(lastErrMsg, sizeof(lastErrMsg), "Failed: %s", msg.substring(12).c_str());
-    if (currentState == STATE_STATUS || currentState == STATE_AP_ACTIVE) { drawHomeContent(); gfx->flush(); }
+    toastError(lastErrMsg);
     return;
   }
 
@@ -233,22 +233,15 @@ void processMsg(const String& msg) {
   // OK:ADDWIFI_FULL / ERR:ADDWIFI_FULL
   if (msg.startsWith("OK:ADDWIFI_FULL:")) {
     hasError = false;
-    hasInfo  = true;
-    infoExpireMs = millis() + 5000UL;
-    snprintf(infoMsg, sizeof(infoMsg), "Tillagd: %s", msg.substring(16).c_str());
-    drawStatusBar();
-    gfx->flush();
+    char buf[40];
+    snprintf(buf, sizeof(buf), "Tillagd: %s", msg.substring(16).c_str());
+    toastInfo(buf);      // replaces the pending "Lägger till WiFi..." toast
     return;
   }
   if (msg.startsWith("ERR:ADDWIFI_FULL:")) {
-    hasInfo  = false;
     hasError = true;
     snprintf(lastErrMsg, sizeof(lastErrMsg), "ERR: %s", msg.substring(17).c_str());
-    if (currentState == STATE_STATUS || currentState == STATE_AP_ACTIVE) {
-      drawHomeContent();
-    }
-    drawStatusBar();   // replace "Lägger till WiFi..." with the error
-    gfx->flush();
+    toastError(lastErrMsg);   // replaces the pending "Lägger till WiFi..." toast
     return;
   }
 

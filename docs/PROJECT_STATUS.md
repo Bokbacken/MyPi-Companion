@@ -102,6 +102,37 @@ PSRAM from `/rigsetup/` each time the disk is presented (2 FAT sectors → up to
 Keyboard mode (password entry): swipe up = `kbCharNext()`, swipe down = `kbCharPrev()`,
 tap = confirm character / OK.
 
+### Action feedback: the toast channel (mandatory convention)
+
+All transient action feedback on the display goes through **one** channel: the toast overlay in
+`display.ino`. This applies to touch actions, web-triggered actions, daemon `OK:` / `ERR:` replies
+and installer results.
+
+| Function | Use for | Colour | TTL |
+|---|---|---|---|
+| `toastInfo(text)` | confirmations, "pending", "done" | `COL_ACCENT` | 5 s |
+| `toastError(text)` | failures, `ERR:` replies | `COL_ERR` | 8 s |
+| `toastSet(text, ttlMs, col)` | custom colour / TTL (`ttlMs = 0` = until replaced) | any | any |
+
+- Geometry: `TOAST_Y` / `TOAST_H` in `config.h` — a 14 px strip (y 221–234) at the bottom of the
+  content area, dark `COL_STATUS_BG` background, max 28 characters.
+- A new toast replaces the current one, so a pending toast (`Lägger till WiFi...`, 30 s) is
+  overwritten by the OK/ERR toast when the reply arrives.
+- `toastTick()` runs every `loop()` and clears the strip when the TTL expires.
+  `updateContentArea()` calls `toastRedraw()`, so a live toast survives page changes.
+- **Never** call `drawHomeContent()` / `drawApActiveContent()` or other page renderers from
+  `protocol.ino`, `web_server.ino` or `hid.ino` to show a message — they repaint a whole page and
+  produce garbage when the user is on another screen.
+- The status bar is for connectivity state only (ESP IP/SSID, Pi IP/SSID). `hasError` /
+  `lastErrMsg` still shows the last daemon error on the Pi SSID line; the old `hasInfo` /
+  `infoMsg` status-bar text was removed in favour of the toast.
+- The installer's own progress lines (`hidSetStatus()`, content area while the blocking install
+  runs) stay as they are; the final result is additionally sent as a toast.
+- Future option: if layered rendering is ever needed (popups, animations), render via a
+  `TFT_eSprite`/canvas in PSRAM. Not needed for the toast.
+
+The rules are repeated in the comment block above the toast functions in `display.ino`.
+
 ---
 
 ## State machine (`config.h`)
@@ -396,6 +427,8 @@ commit both. The script asserts: no FitAddon, `termFit` present, vertical QB pre
 | International keyboard | `In` split into `I1` (Nordic + DE/NL, 21) and `I2` (FR/ES/PT/IT, 25); `€ £ ¥ ¤ §` added to `S2`; Windows-1252 internally, UTF-8 out; custom 5×8 glyphs for `ø Ø ð Ð þ Þ œ ý ã õ € ¤` | #22 (merged) | **verified** — glyphs legible |
 | Pi system info | Daemon sends `STATUS:SYS:k=v\|…` (host, model, OS, kernel, daemon, uptime, temp, load, RAM, disk, power/throttle, Wi-Fi dBm, NTP); touch System Info has ESP / Pi pages; `/info` Raspberry Pi card; `/api/info` `pi_sys` | #23 | **verified** (new daemon installed) |
 | ESP web connect | `/profiles` ESP32 card + per-slot **ESP** / **Pi** buttons; `/api/espconnect`, `/api/espstatus`, `/api/espscan`, `/api/espdisconnect` | #23 | **verified** — connect works, performance unchanged |
+| AP client names | `client_names.ino`: per-client host name from (1) Pi IP match + `STATUS:SYS` host, (2) unicast mDNS reverse PTR to client:5353 from port 5354 (legacy unicast), (3) NetBIOS NBSTAT to client:137, plus (DHCP) option 12 / option 81 FQDN sniffed from client DHCP requests by a wrapper around the AP lwIP netif `input` (re-hooked if the netif is recreated; priority Pi → DHCP → mDNS → NetBIOS); non-blocking, one lookup per 2 s scan, back-off 0/2/5/15/60 s then 5 min. ESP-IDF DHCP server does not keep option 12, hence the sniffer. `/api/apstatus` adds `dhcpNamesSeen` (diagnostic counter). `clientList[]` adds `host`, `hostSrc` (`pi`/`dhcp`/`mdns`/`netbios`), `vendor`; `label` = host ‖ vendor ‖ MAC tail. Host-tested against Avahi and Samba nmbd and with synthetic DHCP frames, ASan fuzzed | #24 | Pi name confirmed on hardware; DHCP names not yet tested |
+| Toast channel | Central action-feedback overlay (`toastInfo` / `toastError` / `toastSet`, `TOAST_Y`/`TOAST_H`); `ERR:CONNECT`, `ERR:ADDWIFI`, `OK:`/`ERR:ADDWIFI_FULL`, NVS → Pi "Lägger till WiFi..." and install DONE/ERR now use it instead of `drawHomeContent()` / status-bar `hasInfo` | #24 | not yet tested |
 | AP-aware STA | Non-blocking `wifiConnectSlot()` + `wifiService()`; `WIFI_AP_STA` while the AP runs; `wifiDisconnect()` keeps web/mDNS when the AP runs; web routes registered once | #23 | long-run soak test in progress |
 
 ## v6.2 — released 2026-10-14
