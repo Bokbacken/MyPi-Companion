@@ -62,6 +62,21 @@ macro pool on FFat · base64-correct macros · `termFit()` · FFat file manageme
 RPC channel + daemon versioning · web login / PIN · robustness (connection limit, OTA
 rollback) · Pi system panel · Pi file manager · recipes + placeholders · web UI cleanup.
 
+### Planned: AP without 802.11b (next firmware batch)
+Always better: 802.11b rates (1–11 Mbit/s DSSS) take a lot of airtime per frame.
+Beacons and management frames are also sent at 1 Mbit/s while 11b is on. No current
+client needs 11b (S25, Tab S10, Pi 5, laptops).
+- AP interface only g/n: `esp_wifi_set_protocol(WIFI_IF_AP, WIFI_PROTOCOL_11G |
+  WIFI_PROTOCOL_11N)` after `WiFi.softAP()`; to verify on core 3.3.x / IDF 5.x:
+  `esp_wifi_config_11b_rate(WIFI_IF_AP, true)` so beacons go out at 6 Mbit/s OFDM
+- STA uplink unchanged (it must be able to join b/g/n networks such as hotel/office APs)
+- Show the active AP protocol on the `Radio` line of the AP diagnostics (e.g. `AP g/n`)
+- Hardware check: Wi-Fi Scanner shows the RigSetup mode as `g, n` (today `b, g, n`),
+  and all clients still connect
+- Background: Delft office 2026-10-15, uplink on ch 1 next to overlapping ch 4 networks
+  (Procentec) gave 0.19–1.45 Mbit/s; the AP has to share channel and airtime with the
+  uplink, so every frame we save counts
+
 ---
 
 ## Next (priority order)
@@ -117,6 +132,10 @@ and `/info`). Remaining: CPU % and a compact widget on the dashboard / status ba
 - Connection event log on FFat (ring buffer)
 - Multiple Pi devices — select the active Pi
 - Touch PIN for authentication during install
+- **Dual-band hardware: ESP32-P4 + ESP32-C5** (ordered). The S3 only has 2.4 GHz and one
+  radio, so the AP must share channel and airtime with the uplink. The C5 adds 5 GHz but
+  lacks the S3's USB device roles; the P4 provides USB (CDC, HID, MSC) and the C5 acts as
+  the Wi-Fi co-processor. New hardware port, not a firmware upgrade of the S3 build
 
 ---
 
