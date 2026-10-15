@@ -45,7 +45,7 @@ macro pool on FFat · base64-correct macros · `termFit()` · FFat file manageme
 - 4 editable AP profiles (name, SSID, password, subnet preset, NAT) — touch picker + `/ap-profiles`
 - NAT internet sharing via ESP32 NAPT (~6 Mbit/s), forced client DNS 1.1.1.1, `/api/apstatus`
 
-### v6.3 Pi system info + ESP web connect — hardware-tested (AP-aware STA soak test pending)
+### v6.3 Pi system info + ESP web connect — hardware-tested (AP-aware STA soak test passed: ~10 h, 2026-10-15)
 - Daemon sends `STATUS:SYS:key=value|…` (hostname, model, OS, kernel, daemon version, uptime,
   load, CPU temp, RAM, disk, throttle flags, Wi-Fi dBm, NTP). Key/value format: new fields
   can be added without a protocol change; unknown keys are shown raw on `/info`
@@ -62,24 +62,72 @@ macro pool on FFat · base64-correct macros · `termFit()` · FFat file manageme
 RPC channel + daemon versioning · web login / PIN · robustness (connection limit, OTA
 rollback) · Pi system panel · Pi file manager · recipes + placeholders · web UI cleanup.
 
+### Planned: AP without 802.11b (next firmware batch)
+Always better: 802.11b rates (1–11 Mbit/s DSSS) take a lot of airtime per frame.
+Beacons and management frames are also sent at 1 Mbit/s while 11b is on. No current
+client needs 11b (S25, Tab S10, Pi 5, laptops).
+- AP interface only g/n: `esp_wifi_set_protocol(WIFI_IF_AP, WIFI_PROTOCOL_11G |
+  WIFI_PROTOCOL_11N)` after `WiFi.softAP()`; to verify on core 3.3.x / IDF 5.x:
+  `esp_wifi_config_11b_rate(WIFI_IF_AP, true)` so beacons go out at 6 Mbit/s OFDM
+- STA uplink unchanged (it must be able to join b/g/n networks such as hotel/office APs)
+- Show the active AP protocol on the `Radio` line of the AP diagnostics (e.g. `AP g/n`)
+- Hardware check: Wi-Fi Scanner shows the RigSetup mode as `g, n` (today `b, g, n`),
+  and all clients still connect
+- Background: Delft office 2026-10-15, uplink on ch 1 next to overlapping ch 4 networks
+  (Procentec) gave 0.19–1.45 Mbit/s; the AP has to share channel and airtime with the
+  uplink, so every frame we save counts
+
 ---
 
 ## Next (priority order)
 
-### 1. Placeholders with session memory — high
-Macros may contain placeholders (the examples use `<NAME>`, the original plan used `{name}`
-— pick one syntax). Values live in browser `sessionStorage`, never stored on the ESP32.
-A popup opens when a macro contains placeholders; per-placeholder `hide` flag (masked
-input with 👁 toggle); "Clear" resets session values.
+### 1. Placeholders with remembered values — high (design confirmed)
+- **Syntax:** `<NAME.>` / `<NAME:>` / `<NAME*>` where the suffix defines type and save
+  behaviour. `NAME`: uppercase letters, digits and `_`, matching `[A-Z][A-Z0-9_]*`. Shell
+  redirection (`cat < file`, `<<EOF`) does not match. Optional default value:
+  `<HOST=192.168.4.1.>` (default before the suffix). No suffix = treated as `.`
+  (backward-compatible with existing `examples/`).
+  - `.` — single value, auto-saved to FFat on run; popup prefills from saved value.
+  - `:` — list, remembered as an ordered list (most recent first, up to 25 items),
+    auto-saved on run; popup shows a dropdown of the recent list.
+  - `*` — entered each time, never saved; popup shows a blank masked field with 👁 toggle.
+    Use for one-off passwords and tokens.
+- **Consistent type per name:** when the same NAME appears in multiple macros the suffix
+  must match. The management UI enforces this and offers to auto-update all occurrences
+  when the type is changed.
+- **Combined tokens:** a compound token like `<IP/PREFIX>` should be split into separate
+  typed placeholders, e.g. `<IP:>/<PREFIX.>`. This is already reflected in `examples/`.
+- **Index:** built automatically by scanning the macro pool. There is no separate list to
+  maintain. A placeholder only gets a stored entry once it has a value or settings.
+- **Run flow:** clicking a macro with placeholders opens a popup.
+  - One field per unique placeholder, prefilled with the saved value (or, for `:`, a
+    dropdown of the recent list).
+  - Live preview of the final command line.
+  - Enter runs the macro, Esc cancels.
+  - Shift+click (or long-press) runs the macro immediately when every placeholder already
+    has a non-empty value.
+- **Hidden / sensitive values:** `*` fields are always masked with a 👁 toggle. `.` and `:`
+  fields whose NAME contains PASS, PSK, TOKEN, SECRET or KEY are masked by default; this
+  can be overridden per placeholder. FFat is not encrypted — the same level as today's
+  macro and Wi-Fi password storage. A value is still echoed by the shell once the command
+  runs.
+- **Macro names:** `[TEMPLATE]` suffixes are removed from macro names. Instead, any macro
+  whose `cmd` contains a placeholder shows a small indicator badge in the macro list —
+  visible at a glance without cluttering the name.
+- **Placeholders page:** a 4th tab in `/macros` and *Placeholders...* in the terminal menu.
+  - Columns: name, type (`.` / `:` / `*`), used in N macros, value / list, hidden flag.
+  - Actions: set a value or add to a list in advance, clear one entry, *Clear all*.
+- **Storage:** `/config/placeholders.json` on FFat. Limits: list max 25 items, value max 64
+  characters. API `/api/ph` (GET/POST/DELETE).
 
 ### 2. File menu — save session — medium
-Save all output as txt / html (keeps ANSI colors) / md, or input history only.
-Iterate `term.buffer.active` in the browser; download via `<a download>`; raise scrollback
-to 10 000 lines (currently 5 000).
+**Partly done:** *Save session…* saves the output as txt, and scrollback is already 10 000
+lines. Remaining: html (keeps ANSI colours) and md formats, or input history only.
 
 ### 3. Command history — medium
-Capture input via `term.onData`. Ctrl+R searchable history (last 100). History view:
-click to run, Shift+click to "Add as macro", export txt/md.
+**Partly done:** shared history (last 100, `localStorage`), Ctrl+Up/Down; macro commands are
+not stored. Remaining: Ctrl+R search, a history view (click runs the command, Shift+click
+*Add as macro*), export as txt/md.
 
 ### 4. Web file editor — medium
 `/editor`, CodeMirror 6 (~80 KB gzip) or a minimal custom editor. Daemon reads the file →
@@ -117,6 +165,10 @@ and `/info`). Remaining: CPU % and a compact widget on the dashboard / status ba
 - Connection event log on FFat (ring buffer)
 - Multiple Pi devices — select the active Pi
 - Touch PIN for authentication during install
+- **Dual-band hardware: ESP32-P4 + ESP32-C5** (ordered). The S3 only has 2.4 GHz and one
+  radio, so the AP must share channel and airtime with the uplink. The C5 adds 5 GHz but
+  lacks the S3's USB device roles; the P4 provides USB (CDC, HID, MSC) and the C5 acts as
+  the Wi-Fi co-processor. New hardware port, not a firmware upgrade of the S3 build
 
 ---
 
