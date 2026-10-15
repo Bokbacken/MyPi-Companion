@@ -1226,7 +1226,6 @@ void startAP(int profileSlot) {
   // Keep STA enabled while connected OR while a connect is in progress,
   // otherwise starting the AP would silently kill the STA attempt.
   WiFi.mode((espConnected || espConnecting) ? WIFI_AP_STA : WIFI_AP);
-  wifiLockGN();           // before softAP(): AP beacons/rates are fixed when the AP starts
   WiFi.setSleep(false);   // re-assert: STA modem sleep throttles NAT traffic
 
   // The ESP32-S3 has one radio, so AP and STA must share a channel.
@@ -1262,15 +1261,6 @@ void startAP(int profileSlot) {
   startWebServer();
   Serial.println("CMD:START_AP");
   apRunning = true;
-}
-
-// "b/g/n", "g/n", ... from a WIFI_PROTOCOL_* bitmap
-String apProtocolStr(uint8_t bm) {
-  String s;
-  if (bm & WIFI_PROTOCOL_11B) s += "b";
-  if (bm & WIFI_PROTOCOL_11G) s += s.length() ? "/g" : "g";
-  if (bm & WIFI_PROTOCOL_11N) s += s.length() ? "/n" : "n";
-  return s.length() ? s : String("?");
 }
 
 void stopAP() {
@@ -1365,12 +1355,6 @@ void handleApiApStatus() {
   esp_wifi_get_bandwidth(WIFI_IF_STA, &staBw);
   j += ",\"channel\":"    + String(prim);
   j += ",\"apBw\":"       + String(apBw  == WIFI_BW_HT40 ? 40 : 20);
-  uint8_t apProto = 0;
-  esp_wifi_get_protocol(WIFI_IF_AP, &apProto);
-  j += ",\"apProto\":\""  + apProtocolStr(apProto) + "\"";
-  uint8_t staProto = 0;
-  esp_wifi_get_protocol(WIFI_IF_STA, &staProto);
-  j += ",\"staProto\":\"" + apProtocolStr(staProto) + "\"";
   j += ",\"staBw\":"      + String(staBw == WIFI_BW_HT40 ? 40 : 20);
   j += ",\"powerSave\":"  + String(ps == WIFI_PS_NONE ? "false" : "true");
   j += ",\"txPowerDbm\":" + String((int)WiFi.getTxPower() / 4.0f, 1);

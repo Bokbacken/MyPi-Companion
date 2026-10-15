@@ -372,7 +372,6 @@ void setup() {
   //          The scan runs in the background while logos are shown.
   wifiDiagInit();          // count STA drops for /api/apstatus
   WiFi.mode(WIFI_STA);
-  wifiLockGN();            // STA + AP g/n only (must happen while the radio is stopped)
   WiFi.setSleep(false);
   WiFi.scanNetworks(true /*async*/, true /*show_hidden*/);
 

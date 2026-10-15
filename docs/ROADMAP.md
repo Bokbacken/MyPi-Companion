@@ -62,15 +62,16 @@ macro pool on FFat · base64-correct macros · `termFit()` · FFat file manageme
 RPC channel + daemon versioning · web login / PIN · robustness (connection limit, OTA
 rollback) · Pi system panel · Pi file manager · recipes + placeholders · web UI cleanup.
 
-### AP without 802.11b — implemented, hardware test pending (branch `feat/v6.4-ap-no11b-term-focus`)
-First attempt (protocol set after `WiFi.softAP()`) had no effect: AP stayed b/g/n.
-Now `wifiLockGN()` locks **both STA and AP** to g/n with 11b rates off (Kent: assume
-everything is newer than 11b). Like HT20 it must be set while the radio is stopped, so it
-stops the radio, enables both interfaces, sets protocol + 11b off + HT20, restores the mode
-and restarts — at boot and after any `WIFI_OFF` re-init; otherwise a no-op.
-`/api/apstatus` reports `apProto` / `staProto`, shown on the AP diagnostics `Radio` line;
-the serial log prints `[WIFI] lock g/n ...` with every result code. Same branch: the terminal
-returns keyboard focus to xterm after a menu item, quick button or the macro editor.
+### AP without 802.11b — tried and reverted (2026-10-15), revisit on P4 + C5
+Two attempts on the S3 (core 3.3.12 / IDF 5.x) both left the AP at b/g/n in Wi-Fi Scanner:
+1. `esp_wifi_set_protocol(WIFI_IF_AP, 11G|11N)` + `esp_wifi_config_11b_rate(WIFI_IF_AP, true)`
+   after `WiFi.softAP()` — no effect.
+2. `wifiLockGN()`: stop the radio, set g/n + 11b off + HT20 on both STA and AP, restart —
+   still b/g/n, and Wi-Fi became noticeably unstable.
+Both reverted; S3 Wi-Fi code is unchanged from v6.3.3. Revisit with the ESP32-C5 Wi-Fi
+co-processor (newer IDF/driver), possibly via `esp_wifi_set_protocols()` / an `sdkconfig`
+option instead of runtime calls. Original reasoning kept below.
+
 Always better: 802.11b rates (1–11 Mbit/s DSSS) take a lot of airtime per frame.
 Beacons and management frames are also sent at 1 Mbit/s while 11b is on. No current
 client needs 11b (S25, Tab S10, Pi 5, laptops).
