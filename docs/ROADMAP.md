@@ -90,7 +90,7 @@ client needs 11b (S25, Tab S10, Pi 5, laptops).
 
 ## Next (priority order)
 
-### 1. Placeholders with remembered values — high (design confirmed)
+### 1. Placeholders with remembered values — implemented in v6.4.0 (hardware test pending)
 - **Syntax:** `<NAME.>` / `<NAME:>` / `<NAME*>` where the suffix defines type and save
   behaviour. `NAME`: uppercase letters, digits and `_`, matching `[A-Z][A-Z0-9_]*`. Shell
   redirection (`cat < file`, `<<EOF`) does not match. Optional default value:

@@ -111,6 +111,7 @@ Requirements (versions verified by the CI build):
 | esp32 by Espressif (board core) | 3.3.12 | Boards Manager |
 | GFX Library for Arduino (moononournation) | 1.6.9 | Library Manager |
 | WebSockets (Markus Sattler) | 2.7.2 | Library Manager |
+| ArduinoJson (Benoit Blanchon) | 7.4.2 | Library Manager |
 
 All other libraries (WiFi, WebServer, FFat, USB HID/MSC, Preferences) ship with the core.
 

@@ -110,6 +110,24 @@ html,body{width:100%;height:100%;background:#111;color:#ccc;font-family:sans-ser
 .section-hdr{font-size:12px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px}
 .cr-check{display:flex;align-items:center;gap:6px;font-size:12px;color:#aaa}
 .cr-check input{width:14px;height:14px}
+#ph-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:600;
+        align-items:center;justify-content:center}
+#ph-bg.show{display:flex}
+#ph-dlg{background:#1c1c1c;border:1px solid #444;border-radius:8px;width:460px;max-width:96vw;
+         max-height:90vh;display:flex;flex-direction:column}
+.ph-hdr{display:flex;align-items:center;padding:10px 14px;border-bottom:1px solid #333;gap:8px}
+.ph-hdr h2{flex:1;font-size:15px;font-weight:600;color:#eee;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ph-x{background:none;border:none;color:#aaa;font-size:20px;cursor:pointer;line-height:1}
+.ph-x:hover{color:#fff}
+#ph-fields{padding:12px 14px;overflow:auto}
+#ph-fields .form-row label{flex:0 0 110px;font-family:Menlo,Monaco,monospace;color:#9cf}
+.ph-eye{background:#2a2a2a;border:1px solid #333;border-radius:4px;color:#aaa;cursor:pointer;
+         padding:3px 7px;font-size:12px}
+#ph-prev{margin:0 14px 10px;padding:6px 8px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:4px;
+          font-family:Menlo,Monaco,monospace;font-size:12px;color:#8c8;white-space:nowrap;overflow:hidden}
+#ph-btns{display:flex;justify-content:flex-end;gap:8px;padding:10px 14px;border-top:1px solid #333}
+.btn-run{background:#1d4d2b;color:#6e6}.btn-run:hover{background:#25633a}
+.ph-badge{font-size:9px;background:#2d2440;color:#b9f;padding:0 4px;border-radius:3px;margin-left:4px}
 #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
         background:#234;border:1px solid #4af;border-radius:6px;padding:7px 18px;
         color:#4af;font-size:13px;z-index:999;display:none}
@@ -129,6 +147,7 @@ html,body{width:100%;height:100%;background:#111;color:#ccc;font-family:sans-ser
       <div class="dd-item" onclick="fontDec()">A&#8315; Font &minus;</div>
       <div class="dd-sep"></div>
       <div class="dd-item" onclick="window.open('/macros','_blank')">&#9998; Edit macros &amp; menus&hellip;</div>
+      <div class="dd-item" onclick="window.open('/macros#ph','_blank')">&#9000; Placeholders&hellip;</div>
       <div class="dd-sep"></div>
       <div class="dd-item" id="sd-share-item" onclick="sdShareToggle()">&#128190; SD Share: <span id="sd-share-st">&hellip;</span></div>
       <div class="dd-item" onclick="window.open('/storage','_blank')">&#128451; Storage &rarr;</div>
@@ -201,6 +220,19 @@ html,body{width:100%;height:100%;background:#111;color:#ccc;font-family:sans-ser
           <button class="btn btn-pri" onclick="saveAllQbtns()">&#8679; Save to device</button>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<div id="ph-bg">
+  <div id="ph-dlg">
+    <div class="ph-hdr"><h2 id="ph-title">Run macro</h2>
+      <button class="ph-x" onclick="phClose()">&times;</button></div>
+    <div id="ph-fields"></div>
+    <div id="ph-prev"></div>
+    <div id="ph-btns">
+      <button class="btn btn-sec" onclick="phClose()">Cancel</button>
+      <button class="btn btn-run" onclick="phRun()">&#9654; Run</button>
     </div>
   </div>
 </div>
@@ -462,17 +494,177 @@ async function saveMacroPool() {
 
 function getMacroById(id) { return macroPool.macros.find(m => m.id === id); }
 
-function runMacro(id) {
-  const m = getMacroById(id);
-  focusTerm();   // quick buttons / menu items keep focus otherwise
-  if (!m || !ws || ws.readyState !== 1) return;
-  const payload = m.cmd + (m.cr ? '\n' : '');
-  try { ws.send(btoa(payload)); }
-  catch (_) {
-    const b = new TextEncoder().encode(payload);
-    let s = ''; b.forEach(x => s += String.fromCharCode(x));
-    ws.send(btoa(s));
+// ================================================================
+//  Placeholders  <NAME.>  <NAME:>  <NAME*>  (optional default: <NAME=val.>)
+//    .  single value, saved on run      :  recent list (max 25), saved on run
+//    *  asked every time, never saved   (none) = '.' (backward compatible)
+//  Values live on the ESP in /config/placeholders.json via /api/ph.
+// ================================================================
+const PH_RE = /<([A-Z][A-Z0-9_]*)(?:=([^<>]*?))?([.:*]?)>/g;
+const PH_SENSITIVE = /PASS|PSK|TOKEN|SECRET|KEY/;
+const PH_LIST_MAX = 25;
+let phCtx = null;   // {macro, items, store} while the dialog is open
+let phBusy = false; // fetching /api/ph for a macro run (ignore double clicks)
+
+// Unique placeholders in order of first appearance. First suffix / default wins.
+function phParse(cmd) {
+  const out = [], seen = {};
+  for (const m of String(cmd || '').matchAll(PH_RE)) {
+    const name = m[1];
+    if (seen[name]) { if (!seen[name].def && m[2]) seen[name].def = m[2]; continue; }
+    const p = { name, type: m[3] || '.', def: m[2] || '' };
+    seen[name] = p; out.push(p);
   }
+  return out;
+}
+
+function phSubst(cmd, vals) {
+  return String(cmd).replace(PH_RE, (all, name) => (name in vals ? vals[name] : all));
+}
+
+// '*' is always masked. '.'/':' follow the stored per-name "hide" override,
+// else auto-mask names containing PASS/PSK/TOKEN/SECRET/KEY.
+function phHidden(p, store) {
+  if (p.type === '*') return true;
+  const e = store && store[p.name];
+  if (e && typeof e.hide === 'boolean') return e.hide;
+  return PH_SENSITIVE.test(p.name);
+}
+
+function phList(e) {
+  if (!e) return [];
+  if (Array.isArray(e.values)) return e.values.filter(v => v !== '');
+  return e.value ? [e.value] : [];
+}
+
+function phInitial(p, store) {
+  if (p.type === '*') return p.def;
+  const l = phList(store[p.name]);
+  return l.length ? l[0] : p.def;
+}
+
+async function phFetch() {
+  try { const r = await fetch('/api/ph'); if (r.ok) return await r.json(); } catch (_) {}
+  return {};
+}
+
+function sendMacro(text, cr) {
+  const payload = text + (cr ? '\n' : '');
+  wsSendText(payload);   // not added to history: may contain '*' secrets
+}
+
+async function runMacro(id, shift) {
+  const m = getMacroById(id);
+  if (!m || !ws || ws.readyState !== 1) { focusTerm(); return; }
+  if (phCtx || phBusy) return;          // dialog already open / opening
+  const items = phParse(m.cmd);
+  if (!items.length) { sendMacro(m.cmd, m.cr); focusTerm(); return; }
+  phBusy = true;
+  let store;
+  try { store = await phFetch(); } finally { phBusy = false; }
+  items.forEach(p => { p.val = phInitial(p, store); });
+  if (shift && items.every(p => p.val !== '')) { phCommit(m, items, store); focusTerm(); return; }
+  phOpen(m, items, store);
+}
+
+function phOpen(m, items, store) {
+  phCtx = { macro: m, items, store };
+  document.getElementById('ph-title').textContent = 'Run macro: ' + m.name;
+  const box = document.getElementById('ph-fields');
+  box.innerHTML = items.map((p, i) => {
+    const hid = phHidden(p, store), list = p.type === ':' ? phList(store[p.name]) : [];
+    const dl = list.length ? `<datalist id="ph-dl-${i}">${list.map(v => `<option value="${esc(v)}">`).join('')}</datalist>` : '';
+    return `<div class="form-row"><label title="type ${p.type}">${esc(p.name)}${p.type === '.' ? '' : ' ' + p.type}</label>
+      <input id="ph-in-${i}" type="${hid ? 'password' : 'text'}" maxlength="64" autocomplete="off"
+        value="${esc(p.val)}" ${list.length ? `list="ph-dl-${i}"` : ''} placeholder="${p.type === ':' ? 'pick or type' : ''}">
+      ${hid ? `<button class="ph-eye" type="button" onclick="phEye(${i})" title="Show / hide">&#128065;</button>` : ''}${dl}</div>`;
+  }).join('');
+  items.forEach((p, i) => {
+    const el = document.getElementById('ph-in-' + i);
+    el.addEventListener('input', phPreview);
+    el.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        if (i === items.length - 1) phRun(); else document.getElementById('ph-in-' + (i + 1)).focus();
+      } else if (ev.key === 'Escape') { ev.preventDefault(); phClose(); }
+    });
+  });
+  phPreview();
+  document.getElementById('ph-bg').classList.add('show');
+  const first = items.findIndex(p => p.val === '');
+  setTimeout(() => { const el = document.getElementById('ph-in-' + (first < 0 ? 0 : first)); el.focus(); el.select(); }, 0);
+}
+
+// Esc closes the dialog even when focus is on a button (inputs handle it themselves).
+document.addEventListener('keydown', ev => {
+  if (ev.key === 'Escape' && phCtx) { ev.preventDefault(); phClose(); }
+});
+
+function phEye(i) {
+  const el = document.getElementById('ph-in-' + i);
+  el.type = el.type === 'password' ? 'text' : 'password';
+  phPreview(); el.focus();
+}
+
+function phRead() {
+  phCtx.items.forEach((p, i) => { p.val = document.getElementById('ph-in-' + i).value; });
+}
+
+function phPreview() {
+  if (!phCtx) return;
+  phRead();
+  const vals = {};
+  phCtx.items.forEach((p, i) => {
+    const shown = document.getElementById('ph-in-' + i).type !== 'password';
+    vals[p.name] = p.val === '' ? '<' + p.name + '>' : (shown ? p.val : '\u2022'.repeat(p.val.length));
+  });
+  let s = phSubst(phCtx.macro.cmd, vals);
+  if (s.length > 60) s = s.slice(0, 59) + '\u2026';
+  document.getElementById('ph-prev').textContent = s;
+}
+
+function phClose() {
+  phCtx = null;
+  document.getElementById('ph-bg').classList.remove('show');
+  document.getElementById('ph-fields').innerHTML = '';   // drop typed secrets from the DOM
+  focusTerm();
+}
+
+function phRun() {
+  if (!phCtx) return;
+  phRead();
+  const miss = phCtx.items.find(p => p.val === '');
+  if (miss) { showToast('Value missing: ' + miss.name, 3000); return; }
+  const { macro, items, store } = phCtx;
+  phClose();
+  phCommit(macro, items, store);
+}
+
+// Send the substituted command, then save '.' and ':' values (never '*').
+async function phCommit(m, items, store) {
+  const vals = {};
+  items.forEach(p => { vals[p.name] = p.val; });
+  sendMacro(phSubst(m.cmd, vals), m.cr);
+  let failed = 0;
+  for (const p of items) {
+    if (p.type === '*') continue;
+    const old = store[p.name], oldList = phList(old);
+    let body;
+    if (p.type === ':') {
+      const list = [p.val].concat(oldList.filter(v => v !== p.val)).slice(0, PH_LIST_MAX);
+      if (old && old.type === ':' && JSON.stringify(list) === JSON.stringify(oldList)) continue;
+      body = { name: p.name, type: ':', values: list };
+    } else {
+      if (old && old.type === '.' && old.value === p.val) continue;
+      body = { name: p.name, type: '.', value: p.val };
+    }
+    try {
+      const r = await fetch('/api/ph', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                         body: JSON.stringify(body) });
+      if (!r.ok) failed++;
+    } catch (_) { failed++; }
+  }
+  if (failed) showToast('Placeholder save failed (' + failed + ')', 4000);
 }
 
 function renderMacroList() {
@@ -482,7 +674,7 @@ function renderMacroList() {
   if (cnt === 0) { el.innerHTML = '<div style="padding:8px;color:#444;font-size:12px">No macros yet</div>'; return; }
   el.innerHTML = macroPool.macros.map(m => `
     <div class="macro-row">
-      <span class="macro-name" title="${esc(m.name)}">${esc(m.name)}</span>
+      <span class="macro-name" title="${esc(m.name)}">${esc(m.name)}${phParse(m.cmd).length?'<span class="ph-badge" title="Has placeholders">&lt;/&gt;</span>':''}</span>
       <span class="macro-cmd"  title="${esc(m.cmd)}">${esc(m.cmd)}</span>
       <span class="macro-cr${m.cr?' on':''}">${m.cr?'\u23ce':'\u2014'}</span>
       <span class="macro-actions">
@@ -578,7 +770,7 @@ function buildDdEntry(e) {
   div.className = 'dd-item';
   const m = getMacroById(e.ref);
   div.textContent = m ? m.name : ('(id ' + e.ref + ')');
-  div.onclick = () => { closeAllMenus(); runMacro(e.ref); };
+  div.onclick = ev => { closeAllMenus(); runMacro(e.ref, ev.shiftKey); };
   return div;
 }
 
@@ -678,7 +870,7 @@ function renderQbGrid() {
       btn.className = 'qb';
       btn.textContent = m.name;
       btn.title = m.name + '\n' + m.cmd;
-      btn.onclick = () => runMacro(m.id);
+      btn.onclick = ev => runMacro(m.id, ev.shiftKey);
     } else {
       btn.className = 'qb empty';
       btn.textContent = '\u00b7';
@@ -733,6 +925,7 @@ function toggleMenu(btn) {
 function focusTerm() {
   setTimeout(() => {
     if (document.getElementById('modal-bg').classList.contains('show')) return;
+    if (document.getElementById('ph-bg').classList.contains('show')) return;
     if (document.querySelector('.dropdown.show')) return;
     term.focus();
   }, 0);
@@ -750,7 +943,7 @@ function closeAllMenus(refocus = true) {
 document.addEventListener('click', e => {
   if (e.target.closest('.dropdown .dd-item:not(.has-sub)')) { closeAllMenus(); return; }
   if (!e.target.closest('.mnu-wrap'))
-    closeAllMenus(!e.target.closest('input,textarea,select,#modal-bg'));
+    closeAllMenus(!e.target.closest('input,textarea,select,#modal-bg,#ph-bg'));
 });
 
 // ================================================================
@@ -894,6 +1087,7 @@ def main():
     # Sanity checks
     assert 'FitAddon' not in content, "FEL: FitAddon finns kvar!"
     assert 'termFit' in content, "FEL: termFit saknas!"
+    assert 'phParse' in content and '/api/ph' in content, "FEL: placeholder-JS saknas!"
     assert 'flex-direction:column' in content, "FEL: vertikal QB saknas!"
     print(f"OK: {len(lines)} rader -> {OUTPUT}")
     print(f"Storlek: {len(content):,} bytes")
