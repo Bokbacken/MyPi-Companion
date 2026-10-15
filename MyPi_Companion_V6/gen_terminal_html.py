@@ -504,6 +504,7 @@ const PH_RE = /<([A-Z][A-Z0-9_]*)(?:=([^<>]*?))?([.:*]?)>/g;
 const PH_SENSITIVE = /PASS|PSK|TOKEN|SECRET|KEY/;
 const PH_LIST_MAX = 25;
 let phCtx = null;   // {macro, items, store} while the dialog is open
+let phBusy = false; // fetching /api/ph for a macro run (ignore double clicks)
 
 // Unique placeholders in order of first appearance. First suffix / default wins.
 function phParse(cmd) {
@@ -521,7 +522,14 @@ function phSubst(cmd, vals) {
   return String(cmd).replace(PH_RE, (all, name) => (name in vals ? vals[name] : all));
 }
 
-function phHidden(p) { return p.type === '*' || PH_SENSITIVE.test(p.name); }
+// '*' is always masked. '.'/':' follow the stored per-name "hide" override,
+// else auto-mask names containing PASS/PSK/TOKEN/SECRET/KEY.
+function phHidden(p, store) {
+  if (p.type === '*') return true;
+  const e = store && store[p.name];
+  if (e && typeof e.hide === 'boolean') return e.hide;
+  return PH_SENSITIVE.test(p.name);
+}
 
 function phList(e) {
   if (!e) return [];
@@ -548,9 +556,12 @@ function sendMacro(text, cr) {
 async function runMacro(id, shift) {
   const m = getMacroById(id);
   if (!m || !ws || ws.readyState !== 1) { focusTerm(); return; }
+  if (phCtx || phBusy) return;          // dialog already open / opening
   const items = phParse(m.cmd);
   if (!items.length) { sendMacro(m.cmd, m.cr); focusTerm(); return; }
-  const store = await phFetch();
+  phBusy = true;
+  let store;
+  try { store = await phFetch(); } finally { phBusy = false; }
   items.forEach(p => { p.val = phInitial(p, store); });
   if (shift && items.every(p => p.val !== '')) { phCommit(m, items, store); focusTerm(); return; }
   phOpen(m, items, store);
@@ -561,7 +572,7 @@ function phOpen(m, items, store) {
   document.getElementById('ph-title').textContent = 'Run macro: ' + m.name;
   const box = document.getElementById('ph-fields');
   box.innerHTML = items.map((p, i) => {
-    const hid = phHidden(p), list = p.type === ':' ? phList(store[p.name]) : [];
+    const hid = phHidden(p, store), list = p.type === ':' ? phList(store[p.name]) : [];
     const dl = list.length ? `<datalist id="ph-dl-${i}">${list.map(v => `<option value="${esc(v)}">`).join('')}</datalist>` : '';
     return `<div class="form-row"><label title="type ${p.type}">${esc(p.name)}${p.type === '.' ? '' : ' ' + p.type}</label>
       <input id="ph-in-${i}" type="${hid ? 'password' : 'text'}" maxlength="64" autocomplete="off"
@@ -583,6 +594,11 @@ function phOpen(m, items, store) {
   const first = items.findIndex(p => p.val === '');
   setTimeout(() => { const el = document.getElementById('ph-in-' + (first < 0 ? 0 : first)); el.focus(); el.select(); }, 0);
 }
+
+// Esc closes the dialog even when focus is on a button (inputs handle it themselves).
+document.addEventListener('keydown', ev => {
+  if (ev.key === 'Escape' && phCtx) { ev.preventDefault(); phClose(); }
+});
 
 function phEye(i) {
   const el = document.getElementById('ph-in-' + i);

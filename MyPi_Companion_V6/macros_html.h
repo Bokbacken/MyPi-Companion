@@ -768,6 +768,27 @@ function phVals(e) {
   return e.value ? [e.value] : [];
 }
 
+// Masked? '*' always; else the stored "hide" override, else the name heuristic.
+function phIsHidden(n, type) {
+  if (type === '*') return true;
+  var e = PHS[n];
+  if (e && typeof e.hide === 'boolean') return e.hide;
+  return PH_SENS.test(n);
+}
+
+// POST body that keeps the current value(s) of n, converted to `type`.
+function phBody(n, type) {
+  var vals = phVals(PHS[n]), b = {name:n, type:type};
+  if (type === ':') b.values = vals.slice(0,25);
+  else if (type === '.') b.value = vals[0] || '';
+  return b;
+}
+
+function phSetHide(n, type, on) {
+  var b = phBody(n, type); b.hide = !!on;
+  phPost(b);
+}
+
 function rph() {
   var idx = phIndex(), body = document.getElementById('phb');
   var names = Object.keys(idx);
@@ -779,7 +800,7 @@ function rph() {
     var e = idx[n], types = e ? Object.keys(e.types) : [];
     var type = types.length ? types.sort(function(a,b){return e.types[b]-e.types[a];})[0] : ((PHS[n]||{}).type||'.');
     var conflict = types.length > 1;
-    var hid = type === '*' || PH_SENS.test(n);
+    var hid = phIsHidden(n, type);
     var vals = phVals(PHS[n]);
     var shown = !hid || phShow[n];
     var vtxt = type === '*' ? '<span class="ph-dim">never saved</span>'
@@ -792,7 +813,9 @@ function rph() {
       '<td>'+sel+(conflict?' <span class="ph-warn" title="Mixed suffixes: '+esc(types.join(' '))+' — pick one to update all macros">⚠</span>':'')+'</td>' +
       '<td>'+(e?e.macros:'<span class="ph-dim">0 (orphan)</span>')+'</td>' +
       '<td class="ph-v'+(type==='*'?'':' ed')+'" '+(type==='*'?'':'onclick="phEdit(\''+n+'\',\''+type+'\',this)"')+'>'+vtxt+'</td>' +
-      '<td>'+(hid&&type!=='*'?'<button class="ic" title="Show / hide" onclick="phShow[\''+n+'\']=!phShow[\''+n+'\'];rph()">👁</button>':'')+'</td>' +
+      '<td style="white-space:nowrap"><input type="checkbox" title="Mask this value (popup + this page)"'+(hid?' checked':'')+
+        (type==='*'?' disabled':' onchange="phSetHide(\''+n+'\',\''+type+'\',this.checked)"')+'>'+
+        (hid&&type!=='*'&&vals.length?' <button class="ic" title="Reveal on this page" onclick="phShow[\''+n+'\']=!phShow[\''+n+'\'];rph()">👁</button>':'')+'</td>' +
       '<td>'+(PHS[n]?'<button class="ic del" title="Forget saved value" onclick="phDel(\''+n+'\')">🗑</button>':'')+'</td>' +
       '</tr>';
   }).join('');
@@ -801,11 +824,12 @@ function rph() {
 function phEdit(n, type, td) {
   if (td.querySelector('textarea,input')) return;
   var vals = phVals(PHS[n]);
-  var hid = PH_SENS.test(n) && !phShow[n];
+  var hid = phIsHidden(n, type) && !phShow[n];
   var el;
   if (type === ':') {
     el = document.createElement('textarea'); el.rows = Math.min(Math.max(vals.length,2),8);
     el.value = vals.join('\n'); el.title = 'One value per line, most recent first (max 25). Ctrl+Enter saves.';
+    if (hid) el.style.webkitTextSecurity = 'disc';
   } else {
     el = document.createElement('input'); el.type = hid ? 'password' : 'text'; el.maxLength = 64;
     el.value = vals[0] || '';
@@ -821,6 +845,8 @@ function phEdit(n, type, td) {
       body.values = el.value.split('\n').map(function(s){return s.trim();})
         .filter(function(s){ if (!s || s.length>64 || seen[s]) return false; seen[s]=1; return true; }).slice(0,25);
     } else body.value = el.value;
+    var nv = type === ':' ? body.values : (body.value ? [body.value] : []);
+    if (JSON.stringify(nv) === JSON.stringify(vals) && PHS[n] && PHS[n].type === type) { rph(); return; }
     phPost(body);
   }
   el.addEventListener('keydown', function(ev){
@@ -859,7 +885,18 @@ function phRetype(n, type) {
     if (nc !== m.cmd) { m.cmd = nc; cnt++; }
   });
   markDirty(); rl(); rph();
-  toast('<' + n + '> set to "' + type + '" in ' + cnt + ' macro(s) — click Save', 4000);
+  toast('<' + n + '> set to "' + type + '" in ' + cnt + ' macro(s) — click Spara alla', 4000);
+  // Keep the stored entry in step: '*' must never keep a value; '.' <-> ':' converts.
+  if (PHS[n]) {
+    if (type === '*') {
+      fetch('/api/ph?name=' + encodeURIComponent(n), {method:'DELETE'})
+        .catch(function(){}).then(loadPH).then(rph);
+    } else if (PHS[n].type !== type) {
+      var b = phBody(n, type);
+      if (typeof PHS[n].hide === 'boolean') b.hide = PHS[n].hide;
+      phPost(b);
+    }
+  }
 }
 
 // ================================================================

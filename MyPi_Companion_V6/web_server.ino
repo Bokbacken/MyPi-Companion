@@ -56,7 +56,7 @@
 //    POST /api/apstart        — start AP with given slot (field: slot) [sets pendingApStart]
 //    GET  /api/apstatus       — JSON: AP/NAT/uplink diagnostics
 //    GET  /api/ph             — JSON: placeholder store ({} if none yet)
-//    POST /api/ph             — set one placeholder {name,type,value|values}
+//    POST /api/ph             — set one placeholder {name,type,value|values[,hide]}
 //    DELETE /api/ph?name=X    — remove one placeholder (name=* clears all)
 //    GET  /logo.png           — MyPi Companion logo (PNG, PROGMEM)
 // ============================================================
@@ -1386,7 +1386,7 @@ void handleApiApStatus() {
 // ============================================================
 // Remembered values for macro placeholders <NAME.> / <NAME:> / <NAME*>.
 // Stored in /config/placeholders.json on FFat as one JSON object:
-//   { "HOST": {"type":".","value":"192.168.4.1"},
+//   { "HOST": {"type":".","value":"192.168.4.1","hide":false},  // hide optional
 //     "SSID": {"type":":","values":["net1","net2"]},   // most recent first
 //     "PASS": {"type":"*","value":""} }                 // '*' never holds a value
 // The file is created on the first POST; GET returns {} until then.
@@ -1444,6 +1444,7 @@ void handleApiPhGet() {
 }
 
 // Body: {"name":"HOST","type":".","value":"..."}  or  {"name":"SSID","type":":","values":[...]}
+// Optional "hide":true|false overrides the PASS/PSK/TOKEN/SECRET/KEY auto-mask.
 void handleApiPhPost() {
   if (!_fatOk) { _phErr(503, "FFat not mounted"); return; }
   String body = server.arg("plain");
@@ -1461,9 +1462,17 @@ void handleApiPhPost() {
   JsonObject root = doc.as<JsonObject>();
   if (!root[name].is<JsonObject>() && root.size() >= PH_MAX_ENTRIES) { _phErr(400, "store full"); return; }
 
+  // Optional per-placeholder mask override. Kept when a later POST omits it
+  // (the terminal only sends values), so a value update never resets it.
+  JsonVariantConst reqHide = req["hide"];
+  JsonVariantConst oldHide = root[name]["hide"];
+  int hide = reqHide.is<bool>() ? (reqHide.as<bool>() ? 1 : 0)
+           : oldHide.is<bool>() ? (oldHide.as<bool>() ? 1 : 0) : -1;
+
   root.remove(name);
   JsonObject e = root[name].to<JsonObject>();
   e["type"] = type;
+  if (hide >= 0) e["hide"] = (hide == 1);
   if (type[0] == ':') {
     JsonArray out = e["values"].to<JsonArray>();
     for (JsonVariant v : req["values"].as<JsonArray>()) {
