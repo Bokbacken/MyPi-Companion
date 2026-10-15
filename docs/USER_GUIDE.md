@@ -1,3 +1,5 @@
+<p align="center"><img src="images/mypi_companion_logo.png" width="260" alt="MyPi Companion logo"></p>
+
 # MyPi Companion — User Guide
 
 _Firmware v6.3.3 · October 2026_
@@ -119,6 +121,9 @@ The screen is split into four fixed horizontal zones:
 | Status bar | 236–299 | 64 px | Network status, always visible (dark background) |
 | Touch bar | 300–319 | 20 px | Labels of the tap zones |
 
+> The screen pictures in this guide are drawn from the firmware layout at 3× size, with
+> example data. Colors and positions match the device; exact pixels may differ slightly.
+
 **Messages (toasts).** Short confirmations and errors appear as a one-line message at
 the bottom of the content area (y = 221–234), just above the status bar. Orange text is
 information (shown for 5 s), red text is an error (shown for 8 s). A new message replaces
@@ -229,15 +234,24 @@ speed (115200 — the actual link is USB CDC so this is nominal; see the note in
 [section 1](#1-hardware-overview)). Swipe right or tap the right zone to open the main
 menu.
 
+<p align="center"><img src="images/screen_home.png" width="220" alt="Home screen"><br>
+<em>Home screen</em></p>
+
 ### Main Menu
 
 Four items: **Pi networks**, **ESP Wi-Fi**, **Local profiles** and **Advanced**.
+
+<p align="center"><img src="images/screen_main_menu.png" width="220" alt="Main Menu"><br>
+<em>Main Menu</em></p>
 
 ### Pi networks
 
 Lists the NetworkManager connections saved on the Pi, as reported by the daemon. The
 connection that is active right now has a **green dot**. Select a connection to make the
 Pi switch to it (`CMD:CONNECT`). The result appears in the status bar.
+
+<p align="center"><img src="images/screen_pi_networks.png" width="220" alt="Pi networks"><br>
+<em>Pi networks — the active connection has a green dot</em></p>
 
 ### Local profiles (→ Pi Profile)
 
@@ -272,6 +286,9 @@ so you can enter the password. **OK** saves the network to a slot and connects.
 | **Boot AP** | Opens a list where you choose which AP profile starts automatically at power-on, or **None** (see below); saved per profile in NVS |
 | **Back** | Back to the main menu |
 
+<p align="center"><img src="images/screen_advanced.png" width="220" alt="Advanced menu"><br>
+<em>Advanced menu</em></p>
+
 #### Boot AP picker
 
 The **Boot AP** item shows the current choice, for example `Boot AP: none`,
@@ -304,6 +321,9 @@ clients the screen shows 3 and a `+N more (web)` row, and `/ap-profiles` lists t
 (see [Client limit](#client-limit)). **Tap left or swipe
 left to stop the AP.** Tap the header to hide the page; the AP keeps running (see
 [section 9](#hiding-and-showing-the-ap-page)).
+
+<p align="center"><img src="images/screen_ap_active.png" width="220" alt="AP active"><br>
+<em>AP active with NAT on and three clients. The header shows the AP icon with an orange <code>+</code> for NAT. With NAT on the ESP is also joined to an upstream network, so the status bar shows the ESP's upstream IP and SSID, while the AP address is on the <code>Web:</code> row</em></p>
 
 Each client row shows the last IP octet and the best name the ESP can find:
 
@@ -370,6 +390,9 @@ is longer than 22 characters, the field shows `...` followed by the last 19 char
 The text is shown in plain text, not masked, so you can check what you typed. This also
 applies to the Pi password in **Install CLI-Pi**, so make sure nobody else can see the
 screen.
+
+<p align="center"><img src="images/screen_keyboard.png" width="220" alt="Character picker keyboard"><br>
+<em>Character picker keyboard</em></p>
 
 ### Controls
 
