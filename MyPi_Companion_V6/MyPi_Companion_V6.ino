@@ -54,6 +54,7 @@
 using namespace fs;
 #include <WebServer.h>
 #include <Preferences.h>
+#include <ArduinoJson.h>   // /api/ph placeholder store
 
 #include "jd9853_init.h"
 #include "touch_axs5106l.h"

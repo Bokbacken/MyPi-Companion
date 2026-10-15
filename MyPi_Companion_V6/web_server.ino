@@ -55,6 +55,9 @@
 //    POST /api/approfile/save — save one AP profile (fields: slot, name, ssid, pass, subnet, nat)
 //    POST /api/apstart        — start AP with given slot (field: slot) [sets pendingApStart]
 //    GET  /api/apstatus       — JSON: AP/NAT/uplink diagnostics
+//    GET  /api/ph             — JSON: placeholder store ({} if none yet)
+//    POST /api/ph             — set one placeholder {name,type,value|values}
+//    DELETE /api/ph?name=X    — remove one placeholder (name=* clears all)
 //    GET  /logo.png           — MyPi Companion logo (PNG, PROGMEM)
 // ============================================================
 
@@ -1012,6 +1015,11 @@ void startWebServer() {
   server.on("/api/apstart",        HTTP_POST, handleApiApStart);
   server.on("/api/apstatus",       HTTP_GET,  handleApiApStatus);
 
+  // Macro placeholders (/config/placeholders.json)
+  server.on("/api/ph", HTTP_GET,    handleApiPhGet);
+  server.on("/api/ph", HTTP_POST,   handleApiPhPost);
+  server.on("/api/ph", HTTP_DELETE, handleApiPhDelete);
+
   // ── OTA ────────────────────────────────────────────────────
   server.on("/update",           HTTP_GET,  handleOtaPage);
   server.on("/api/otaprogress",  HTTP_GET,  handleOtaProgress);
@@ -1370,4 +1378,130 @@ void handleApiApStatus() {
   if (dnsTest.length()) j += ",\"dnsTest\":\"" + dnsTest + "\"";
   j += "}";
   server.send(200, "application/json", j);
+}
+
+
+// ============================================================
+//  PLACEHOLDERS  —  /api/ph  (GET / POST / DELETE)
+// ============================================================
+// Remembered values for macro placeholders <NAME.> / <NAME:> / <NAME*>.
+// Stored in /config/placeholders.json on FFat as one JSON object:
+//   { "HOST": {"type":".","value":"192.168.4.1"},
+//     "SSID": {"type":":","values":["net1","net2"]},   // most recent first
+//     "PASS": {"type":"*","value":""} }                 // '*' never holds a value
+// The file is created on the first POST; GET returns {} until then.
+// Same access level as every other route here (no auth on the local web UI).
+
+#define PH_FILE      "/config/placeholders.json"
+#define PH_TMP_FILE  "/config/placeholders.tmp"
+
+static bool _phValidName(const char *n) {
+  size_t len = n ? strlen(n) : 0;
+  if (len == 0 || len > PH_NAME_MAX) return false;
+  if (n[0] < 'A' || n[0] > 'Z') return false;
+  for (size_t i = 1; i < len; i++) {
+    char c = n[i];
+    if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_')) return false;
+  }
+  return true;
+}
+
+// Load the store into doc. Missing or corrupt file -> empty object.
+static void _phLoad(JsonDocument &doc) {
+  doc.clear();
+  if (FFat.exists(PH_FILE)) {
+    File f = FFat.open(PH_FILE, "r");
+    if (f) {
+      DeserializationError err = deserializeJson(doc, f);
+      f.close();
+      if (err) Serial.printf("PH: %s unreadable (%s), starting empty\n", PH_FILE, err.c_str());
+    }
+  }
+  if (!doc.is<JsonObject>()) doc.to<JsonObject>();
+}
+
+// Write via a temp file so a power cut never leaves a half-written store.
+static bool _phSave(JsonDocument &doc) {
+  File f = FFat.open(PH_TMP_FILE, "w");
+  if (!f) return false;
+  size_t n = serializeJson(doc, f);
+  f.close();
+  if (n == 0) { FFat.remove(PH_TMP_FILE); return false; }
+  FFat.remove(PH_FILE);
+  return FFat.rename(PH_TMP_FILE, PH_FILE);
+}
+
+static void _phErr(int code, const char *msg) {
+  server.send(code, "application/json", String("{\"ok\":false,\"error\":\"") + msg + "\"}");
+}
+
+void handleApiPhGet() {
+  if (!_fatOk) { _phErr(503, "FFat not mounted"); return; }
+  File f = FFat.exists(PH_FILE) ? FFat.open(PH_FILE, "r") : File();
+  if (!f) { server.send(200, "application/json", "{}"); return; }
+  server.streamFile(f, "application/json");
+  f.close();
+}
+
+// Body: {"name":"HOST","type":".","value":"..."}  or  {"name":"SSID","type":":","values":[...]}
+void handleApiPhPost() {
+  if (!_fatOk) { _phErr(503, "FFat not mounted"); return; }
+  String body = server.arg("plain");
+  if (body.length() == 0 || body.length() > PH_BODY_MAX) { _phErr(400, "bad body size"); return; }
+
+  JsonDocument req;
+  if (deserializeJson(req, body)) { _phErr(400, "invalid JSON"); return; }
+  const char *name = req["name"] | "";
+  const char *type = req["type"] | ".";
+  if (!_phValidName(name)) { _phErr(400, "invalid name"); return; }
+  if (strcmp(type, ".") && strcmp(type, ":") && strcmp(type, "*")) { _phErr(400, "invalid type"); return; }
+
+  JsonDocument doc;
+  _phLoad(doc);
+  JsonObject root = doc.as<JsonObject>();
+  if (!root[name].is<JsonObject>() && root.size() >= PH_MAX_ENTRIES) { _phErr(400, "store full"); return; }
+
+  root.remove(name);
+  JsonObject e = root[name].to<JsonObject>();
+  e["type"] = type;
+  if (type[0] == ':') {
+    JsonArray out = e["values"].to<JsonArray>();
+    for (JsonVariant v : req["values"].as<JsonArray>()) {
+      const char *s = v | "";
+      if (!*s || strlen(s) > PH_VALUE_MAX) continue;
+      if (out.size() >= PH_LIST_MAX) break;
+      out.add(s);
+    }
+  } else if (type[0] == '.') {
+    const char *v = req["value"] | "";
+    if (strlen(v) > PH_VALUE_MAX) { _phErr(400, "value too long"); return; }
+    e["value"] = v;
+  } else {
+    e["value"] = "";          // '*' is never stored
+  }
+
+  if (!_phSave(doc)) { _phErr(500, "write failed"); return; }
+  server.send(200, "application/json", "{\"ok\":true}");
+}
+
+// DELETE /api/ph?name=HOST   (name=* clears the whole store)
+void handleApiPhDelete() {
+  if (!_fatOk) { _phErr(503, "FFat not mounted"); return; }
+  String name = server.arg("name");
+  if (name == "*") {
+    FFat.remove(PH_FILE);
+    server.send(200, "application/json", "{\"ok\":true,\"removed\":true}");
+    return;
+  }
+  if (!_phValidName(name.c_str())) { _phErr(400, "invalid name"); return; }
+  JsonDocument doc;
+  _phLoad(doc);
+  JsonObject root = doc.as<JsonObject>();
+  bool had = root[name].is<JsonObject>();
+  if (had) {
+    root.remove(name);
+    if (!_phSave(doc)) { _phErr(500, "write failed"); return; }
+  }
+  server.send(200, "application/json", had ? "{\"ok\":true,\"removed\":true}"
+                                           : "{\"ok\":true,\"removed\":false}");
 }

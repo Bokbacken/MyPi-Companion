@@ -11,6 +11,7 @@
 //          { type:"submenu", label:"...", entries:[...] }
 //
 //  QB slots: NVS via /api/quickbtns (GET) and /api/quickbtns/save (POST)
+//  Placeholders: /api/ph GET / POST {name,type,value|values} / DELETE ?name=
 //  File save: POST /upload  (FormData, field "file")
 //  File read: GET  /files/<name>
 //
@@ -176,6 +177,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
     font-size:14px;padding:0 4px;border-radius:3px;transition:color .1s}
 .qx:hover{color:var(--accent)}
 
+/* ── Placeholders pane ── */
+.ph-t{width:100%;border-collapse:collapse;font-size:12px}
+.ph-t th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);
+         padding:6px 8px;border-bottom:1px solid var(--border)}
+.ph-t td{padding:6px 8px;border-bottom:1px solid var(--elev);vertical-align:middle}
+.ph-n{font-family:var(--mono);color:#c4b5fd;white-space:nowrap}
+.ph-v{font-family:var(--mono);color:var(--muted);word-break:break-all}
+.ph-v.ed{cursor:text}.ph-v.ed:hover{background:var(--elev)}
+.ph-dim{color:var(--dim);font-style:italic;font-family:inherit}
+.ph-warn{color:#f59e0b;cursor:help}
+.ph-type{background:var(--elev);color:var(--text);border:1px solid var(--border);border-radius:4px;
+         font-family:var(--mono);padding:2px 4px}
+.ph-in{width:100%;padding:4px 6px;background:var(--bg);border:1px solid var(--accent);border-radius:4px;
+       color:var(--text);font-family:var(--mono);font-size:12px;outline:none}
+.mc .ph-badge{font-size:9px;background:#2d2440;color:#c4b5fd;padding:1px 4px;border-radius:3px;flex-shrink:0}
+
 /* ── Modal ── */
 #ov{position:fixed;inset:0;background:rgba(0,0,0,.75);
     display:none;align-items:center;justify-content:center;z-index:200}
@@ -242,6 +259,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
     <div class="tabs">
       <div class="tab on"  onclick="sw('m')" id="tab-m">🗂 Menyer</div>
       <div class="tab"     onclick="sw('q')" id="tab-q">⚡ QB-panel (25)</div>
+      <div class="tab"     onclick="sw('p')" id="tab-p">&lt;/&gt; Placeholders (<span id="ph-cnt">0</span>)</div>
     </div>
 
     <!-- Menus pane -->
@@ -269,6 +287,27 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
       </div>
       <div class="ql" id="qbl"></div>
     </div>
+
+    <!-- Placeholders pane -->
+    <div id="pane-p" class="pane">
+      <div class="hint-strip">
+        Placeholders in macro commands are filled in when the macro runs:
+        <b>&lt;NAME.&gt;</b> one saved value · <b>&lt;NAME:&gt;</b> saved list (max 25, most recent first) ·
+        <b>&lt;NAME*&gt;</b> asked every time, never saved. No suffix = <b>.</b>; default value:
+        <b>&lt;HOST=192.168.4.1.&gt;</b>.<br>
+        Click a value to edit it (saved to the ESP right away). Changing the type rewrites the suffix in every
+        macro — then click <b>Spara alla</b>. Shift+click a macro in the terminal to run it without the popup.
+      </div>
+      <div class="tree-tb">
+        <span class="sp"></span>
+        <button class="btn btn-g" style="font-size:12px" onclick="loadPH().then(rph)">↻ Reload</button>
+        <button class="btn btn-g" style="font-size:12px" onclick="phClearAll()">🗑 Clear all values</button>
+      </div>
+      <table class="ph-t">
+        <thead><tr><th>Name</th><th>Type</th><th>Used in</th><th>Value / list</th><th>Hide</th><th></th></tr></thead>
+        <tbody id="phb"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -283,8 +322,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
     <div class="fr">
       <label>Kommando</label>
       <textarea id="mc" maxlength="200"
-        placeholder="ip addr show&#10;En rad = ett kommando.&#10;Använd {variabel} för platshållare som frågas vid körning."></textarea>
-      <div class="hint">Tips: <code>{host}</code>, <code>{port}</code>, <code>{ip}</code> — popup visas i terminalen</div>
+        placeholder="ip addr show&#10;En rad = ett kommando.&#10;Placeholders: &lt;HOST.&gt; &lt;SSID:&gt; &lt;PASS*&gt;"></textarea>
+      <div class="hint">Placeholders: <code>&lt;HOST.&gt;</code> saved value, <code>&lt;SSID:&gt;</code> saved list,
+        <code>&lt;PASS*&gt;</code> never saved; default: <code>&lt;HOST=192.168.4.1.&gt;</code> — asked in a popup in the terminal</div>
     </div>
     <div class="fr">
       <label class="chk">
@@ -324,8 +364,9 @@ window.addEventListener('load', async function() {
   st('Laddar…');
   // Load all data in parallel, then render once — avoids the race where
   // rt() runs before MP is populated and macro refs resolve to '?'.
-  await Promise.all([loadMacros(), loadMenus(), loadQB()]);
-  rl(); rt(); rqb();
+  await Promise.all([loadMacros(), loadMenus(), loadQB(), loadPH()]);
+  rl(); rt(); rqb(); rph();
+  if (location.hash === '#ph') sw('p');
   st('Redo');
 });
 
@@ -415,7 +456,7 @@ function doImport(e) {
       if (!mp && !mc) { toast('No macros or menus found in file!'); return; }
       if (mp) MP = fixNextId(mp, mp.macros);
       if (mc) MC = fixNextId(mc, mc.menus);
-      rl(); rt(); rqb(); markDirty();
+      rl(); rt(); rqb(); rph(); markDirty();
       toast((mp && mc ? 'Macros + menus' : mp ? mp.macros.length + ' macros' : mc.menus.length + ' menus') +
             ' imported — click Save to apply', 4000);
     } catch(err) { toast('Ogiltig JSON-fil!'); }
@@ -447,7 +488,7 @@ function uid() { return MC.nextId++; }
 //  Tab switch
 // ================================================================
 function sw(t) {
-  ['m','q'].forEach(function(k){
+  ['m','q','p'].forEach(function(k){
     document.getElementById('tab-'+k).classList.toggle('on', k===t);
     document.getElementById('pane-'+k).classList.toggle('on', k===t);
   });
@@ -476,6 +517,7 @@ function rl() {
     d.innerHTML =
       '<div class="mn">' + esc(m.name) +
         (m.cr ? '<span class="cr-badge">CR</span>' : '') +
+        (hasPh(m) ? '<span class="ph-badge" title="Has placeholders">&lt;/&gt;</span>' : '') +
         '<div class="mcb">' +
           '<button class="ic" title="Redigera" onclick="openModal('+m.id+');event.stopPropagation()">✏️</button>' +
           '<button class="ic del" title="Radera" onclick="delById('+m.id+');event.stopPropagation()">🗑</button>' +
@@ -688,6 +730,139 @@ function doQB(slot, mid) {
 function clrQB(slot) { QB[slot]=-1; saveQBSlot(slot,-1); rqb(); }
 
 // ================================================================
+//  Placeholders tab  —  <NAME.> <NAME:> <NAME*>  (store: /api/ph)
+// ================================================================
+var PH_RE = /<([A-Z][A-Z0-9_]*)(?:=([^<>]*?))?([.:*]?)>/g;
+var PH_SENS = /PASS|PSK|TOKEN|SECRET|KEY/;
+var PHS = {};          // store from GET /api/ph
+var phShow = {};       // name -> true when the user revealed a hidden value
+
+function phTokens(cmd) {
+  var out = [], m; PH_RE.lastIndex = 0;
+  while ((m = PH_RE.exec(String(cmd||''))) !== null) out.push({name:m[1], type:m[3]||'.'});
+  return out;
+}
+function hasPh(m) { return phTokens(m.cmd).length > 0; }
+
+// name -> {types:{'.':n,...}, macros:N}
+function phIndex() {
+  var idx = {};
+  MP.macros.forEach(function(m){
+    var seen = {};
+    phTokens(m.cmd).forEach(function(t){
+      var e = idx[t.name] || (idx[t.name] = {types:{}, macros:0});
+      e.types[t.type] = (e.types[t.type]||0) + 1;
+      if (!seen[t.name]) { seen[t.name] = 1; e.macros++; }
+    });
+  });
+  return idx;
+}
+
+async function loadPH() {
+  try { var r = await fetch('/api/ph'); PHS = r.ok ? await r.json() : {}; } catch(e) { PHS = {}; }
+}
+
+function phVals(e) {
+  if (!e) return [];
+  if (Array.isArray(e.values)) return e.values;
+  return e.value ? [e.value] : [];
+}
+
+function rph() {
+  var idx = phIndex(), body = document.getElementById('phb');
+  var names = Object.keys(idx);
+  Object.keys(PHS).forEach(function(n){ if (!idx[n]) names.push(n); });
+  names.sort();
+  document.getElementById('ph-cnt').textContent = names.length;
+  if (!names.length) { body.innerHTML = '<tr><td colspan="6" class="lib-empty">No placeholders in any macro yet.</td></tr>'; return; }
+  body.innerHTML = names.map(function(n){
+    var e = idx[n], types = e ? Object.keys(e.types) : [];
+    var type = types.length ? types.sort(function(a,b){return e.types[b]-e.types[a];})[0] : ((PHS[n]||{}).type||'.');
+    var conflict = types.length > 1;
+    var hid = type === '*' || PH_SENS.test(n);
+    var vals = phVals(PHS[n]);
+    var shown = !hid || phShow[n];
+    var vtxt = type === '*' ? '<span class="ph-dim">never saved</span>'
+             : !vals.length ? '<span class="ph-dim">— click to set —</span>'
+             : esc(shown ? vals.join('  ·  ') : vals.map(function(v){return '\u2022'.repeat(Math.min(v.length,12));}).join('  ·  '));
+    var sel = '<select class="ph-type" onchange="phRetype(\''+n+'\',this.value)" title="Changes the suffix in every macro">' +
+      ['.',':','*'].map(function(t){return '<option'+(t===type?' selected':'')+'>'+t+'</option>';}).join('') + '</select>';
+    return '<tr>' +
+      '<td class="ph-n">&lt;'+esc(n)+'&gt;</td>' +
+      '<td>'+sel+(conflict?' <span class="ph-warn" title="Mixed suffixes: '+esc(types.join(' '))+' — pick one to update all macros">⚠</span>':'')+'</td>' +
+      '<td>'+(e?e.macros:'<span class="ph-dim">0 (orphan)</span>')+'</td>' +
+      '<td class="ph-v'+(type==='*'?'':' ed')+'" '+(type==='*'?'':'onclick="phEdit(\''+n+'\',\''+type+'\',this)"')+'>'+vtxt+'</td>' +
+      '<td>'+(hid&&type!=='*'?'<button class="ic" title="Show / hide" onclick="phShow[\''+n+'\']=!phShow[\''+n+'\'];rph()">👁</button>':'')+'</td>' +
+      '<td>'+(PHS[n]?'<button class="ic del" title="Forget saved value" onclick="phDel(\''+n+'\')">🗑</button>':'')+'</td>' +
+      '</tr>';
+  }).join('');
+}
+
+function phEdit(n, type, td) {
+  if (td.querySelector('textarea,input')) return;
+  var vals = phVals(PHS[n]);
+  var hid = PH_SENS.test(n) && !phShow[n];
+  var el;
+  if (type === ':') {
+    el = document.createElement('textarea'); el.rows = Math.min(Math.max(vals.length,2),8);
+    el.value = vals.join('\n'); el.title = 'One value per line, most recent first (max 25). Ctrl+Enter saves.';
+  } else {
+    el = document.createElement('input'); el.type = hid ? 'password' : 'text'; el.maxLength = 64;
+    el.value = vals[0] || '';
+  }
+  el.className = 'ph-in'; td.innerHTML = ''; td.appendChild(el); el.focus();
+  var done = false;
+  function commit(save) {
+    if (done) return; done = true;
+    if (!save) { rph(); return; }
+    var body = {name:n, type:type};
+    if (type === ':') {
+      var seen = {};
+      body.values = el.value.split('\n').map(function(s){return s.trim();})
+        .filter(function(s){ if (!s || s.length>64 || seen[s]) return false; seen[s]=1; return true; }).slice(0,25);
+    } else body.value = el.value;
+    phPost(body);
+  }
+  el.addEventListener('keydown', function(ev){
+    if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); commit(false); }
+    else if (ev.key === 'Enter' && (type !== ':' || ev.ctrlKey)) { ev.preventDefault(); commit(true); }
+  });
+  el.addEventListener('blur', function(){ commit(true); });
+}
+
+async function phPost(body) {
+  try {
+    var r = await fetch('/api/ph', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    toast(r.ok ? body.name + ' saved' : 'Save failed: ' + (await r.text()), r.ok ? 1800 : 4000);
+  } catch(e) { toast('Save failed'); }
+  await loadPH(); rph();
+}
+
+async function phDel(n) {
+  if (!confirm('Forget the saved value(s) for <' + n + '>?')) return;
+  try { await fetch('/api/ph?name=' + encodeURIComponent(n), {method:'DELETE'}); } catch(e) {}
+  await loadPH(); rph(); toast(n + ' cleared', 1800);
+}
+
+async function phClearAll() {
+  if (!confirm('Forget ALL saved placeholder values?')) return;
+  try { await fetch('/api/ph?name=*', {method:'DELETE'}); } catch(e) {}
+  await loadPH(); rph(); toast('All placeholder values cleared', 2000);
+}
+
+// Set the suffix of <NAME…> in every macro (keeps any =default).
+function phRetype(n, type) {
+  var re = new RegExp('<' + n + '(=[^<>]*?)?([.:*]?)>', 'g'), cnt = 0;
+  var suf = type;
+  MP.macros.forEach(function(m){
+    var nc = String(m.cmd||'').replace(re, function(all, def){ return '<' + n + (def||'') + suf + '>'; });
+    if (nc !== m.cmd) { m.cmd = nc; cnt++; }
+  });
+  markDirty(); rl(); rph();
+  toast('<' + n + '> set to "' + type + '" in ' + cnt + ' macro(s) — click Save', 4000);
+}
+
+// ================================================================
 //  Modal
 // ================================================================
 function openModal(id) {
@@ -716,7 +891,7 @@ function saveMo() {
   } else {
     MP.macros.push({id:MP.nextId++, name:name, cmd:cmd, cr:cr});
   }
-  markDirty(); rl(); rqb(); closeModal();
+  markDirty(); rl(); rqb(); rph(); closeModal();
 }
 
 function delMacro() { if (editId!==null){ delById(editId); closeModal(); } }
@@ -735,7 +910,7 @@ function delById(id) {
   // remove from QB
   for(var i=0;i<25;i++){ if(QB[i]===id){ QB[i]=-1; saveQBSlot(i,-1); } }
   if(selId===id) selId=null;
-  markDirty(); rl(); rt(); rqb();
+  markDirty(); rl(); rt(); rqb(); rph();
 }
 
 // ================================================================

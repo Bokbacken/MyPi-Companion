@@ -9,7 +9,7 @@
 // -----------------------------------------------------------
 //  Firmware version
 // -----------------------------------------------------------
-#define FW_VERSION    "6.3.3"
+#define FW_VERSION    "6.4.0"
 // __DATE__ = "Oct 13 2026" (compiler-injected, MMM DD YYYY)
 // Reformatted to "DD Mon YYYY" at runtime (see display.ino / web_server.ino)
 
@@ -250,6 +250,16 @@ struct TermMacro {
   char cmd[MACRO_CMD_LEN];
   bool valid;
 };
+
+// -----------------------------------------------------------
+//  Macro placeholders  (/api/ph, /config/placeholders.json)
+// -----------------------------------------------------------
+#define PH_NAME_MAX      32    // [A-Z][A-Z0-9_]*
+#define PH_VALUE_MAX     64    // chars per value
+#define PH_LIST_MAX      25    // ':' list length (most recent first)
+#define PH_MAX_ENTRIES   64    // distinct placeholders in the store
+#define PH_BODY_MAX    4096    // max POST body (25 x 64-char list + JSON)
+
 
 // -----------------------------------------------------------
 //  State machine
