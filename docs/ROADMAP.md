@@ -81,20 +81,43 @@ client needs 11b (S25, Tab S10, Pi 5, laptops).
 
 ## Next (priority order)
 
-### 1. Placeholders with session memory — high
-Macros may contain placeholders (the examples use `<NAME>`, the original plan used `{name}`
-— pick one syntax). Values live in browser `sessionStorage`, never stored on the ESP32.
-A popup opens when a macro contains placeholders; per-placeholder `hide` flag (masked
-input with 👁 toggle); "Clear" resets session values.
+### 1. Placeholders with remembered values — high (design proposal, Kent to confirm)
+- **Syntax:** `<NAME>`: uppercase letters, digits and `_`, matching `<[A-Z][A-Z0-9_]*>`. This
+  is already used by `examples/` (`<HOST>`, `<SERVICE>`, `<USER>`, …). Shell redirection like
+  `cat < file` or `<<EOF` does not match. Optional default value: `<HOST=192.168.4.1>`.
+- **Index:** built automatically by scanning the macro pool. There is no separate list to
+  maintain. A placeholder only gets a stored entry once it has a value or settings.
+- **Run flow:** clicking a macro with placeholders opens a popup.
+  - One field per unique placeholder, prefilled with the remembered value, plus a short
+    recent list.
+  - Live preview of the final command line.
+  - Enter runs the macro, Esc cancels.
+  - Shift+click (or long-press) runs the macro straight away when every placeholder
+    already has a value.
+- **Remember per value** (selector in the popup):
+  - *Don't*.
+  - *Session*: ESP RAM, shared by all 4 terminals and all devices, cleared on reboot.
+  - *Save*: NVS, kept for several days and survives reboot and OTA.
+  - Browser `sessionStorage` is per tab, so it is not used: it would give each terminal
+    session its own values.
+- **Hidden values:** the field is masked and has a 👁 toggle. Names containing PASS, PSK,
+  TOKEN, SECRET or KEY are hidden by default; this can be changed. NVS is not encrypted,
+  which is the same level as today's Wi-Fi/AP passwords. A value is still echoed by the
+  shell once the command runs.
+- **Placeholders page:** a 4th tab in `/macros` and *Placeholders…* in the terminal menu.
+  - Columns: name, used in N macros, value (masked when hidden), scope, hidden flag.
+  - Actions: set a value in advance, clear one, *Clear session*, *Clear saved*.
+- **Storage:** NVS namespace `ph`, one JSON blob (NVS keys are max 15 characters).
+  Limits: 32 saved values, value max 64 characters. API `/api/ph` (GET/POST/DELETE).
 
 ### 2. File menu — save session — medium
-Save all output as txt / html (keeps ANSI colors) / md, or input history only.
-Iterate `term.buffer.active` in the browser; download via `<a download>`; raise scrollback
-to 10 000 lines (currently 5 000).
+**Partly done:** *Save session…* saves the output as txt, and scrollback is already 10 000
+lines. Remaining: html (keeps ANSI colours) and md formats, or input history only.
 
 ### 3. Command history — medium
-Capture input via `term.onData`. Ctrl+R searchable history (last 100). History view:
-click to run, Shift+click to "Add as macro", export txt/md.
+**Partly done:** shared history (last 100, `localStorage`), Ctrl+Up/Down; macro commands are
+not stored. Remaining: Ctrl+R search, a history view (click runs the command, Shift+click
+*Add as macro*), export as txt/md.
 
 ### 4. Web file editor — medium
 `/editor`, CodeMirror 6 (~80 KB gzip) or a minimal custom editor. Daemon reads the file →
