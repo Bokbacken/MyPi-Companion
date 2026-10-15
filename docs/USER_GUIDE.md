@@ -99,20 +99,7 @@ You do not need to unplug and reconnect it.
 
 The screen is split into four fixed horizontal zones:
 
-```
- y=0   ┌──────────────────────┐
-       │ Header     (AP)[logo]│  20 px   screen title, AP icon (when on), MyPi icon
- y=20  ├──────────────────────┤
-       │                      │
-       │   Content area       │  216 px  menus / info / keyboard
-       │                      │          (menu rows are 18 px high)
-       │                      │
- y=236 ├──────────────────────┤
-       │   Status bar         │  64 px   ESP + Pi network status
- y=300 ├──────────────────────┤
-       │ Touch bar            │  20 px   2 or 3 labeled tap zones
- y=319 └──────────────────────┘
-```
+<p align="center"><img src="images/screen_display_layout.png" width="720" alt="Display layout"></p>
 
 | Zone | Rows (y) | Height | Content |
 |---|---|---|---|
