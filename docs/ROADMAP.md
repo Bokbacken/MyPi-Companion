@@ -81,34 +81,44 @@ client needs 11b (S25, Tab S10, Pi 5, laptops).
 
 ## Next (priority order)
 
-### 1. Placeholders with remembered values — high (design proposal, Kent to confirm)
-- **Syntax:** `<NAME>`: uppercase letters, digits and `_`, matching `<[A-Z][A-Z0-9_]*>`. This
-  is already used by `examples/` (`<HOST>`, `<SERVICE>`, `<USER>`, …). Shell redirection like
-  `cat < file` or `<<EOF` does not match. Optional default value: `<HOST=192.168.4.1>`.
+### 1. Placeholders with remembered values — high (design confirmed)
+- **Syntax:** `<NAME.>` / `<NAME:>` / `<NAME*>` where the suffix defines type and save
+  behaviour. `NAME`: uppercase letters, digits and `_`, matching `[A-Z][A-Z0-9_]*`. Shell
+  redirection (`cat < file`, `<<EOF`) does not match. Optional default value:
+  `<HOST=192.168.4.1.>` (default before the suffix). No suffix = treated as `.`
+  (backward-compatible with existing `examples/`).
+  - `.` — single value, auto-saved to FFat on run; popup prefills from saved value.
+  - `:` — list, remembered as an ordered list (most recent first, up to 25 items),
+    auto-saved on run; popup shows a dropdown of the recent list.
+  - `*` — entered each time, never saved; popup shows a blank masked field with 👁 toggle.
+    Use for one-off passwords and tokens.
+- **Consistent type per name:** when the same NAME appears in multiple macros the suffix
+  must match. The management UI enforces this and offers to auto-update all occurrences
+  when the type is changed.
+- **Combined tokens:** a compound token like `<IP/PREFIX>` should be split into separate
+  typed placeholders, e.g. `<IP:>/<PREFIX.>`. This is already reflected in `examples/`.
 - **Index:** built automatically by scanning the macro pool. There is no separate list to
   maintain. A placeholder only gets a stored entry once it has a value or settings.
 - **Run flow:** clicking a macro with placeholders opens a popup.
-  - One field per unique placeholder, prefilled with the remembered value, plus a short
-    recent list.
+  - One field per unique placeholder, prefilled with the saved value (or, for `:`, a
+    dropdown of the recent list).
   - Live preview of the final command line.
   - Enter runs the macro, Esc cancels.
-  - Shift+click (or long-press) runs the macro straight away when every placeholder
-    already has a value.
-- **Remember per value** (selector in the popup):
-  - *Don't*.
-  - *Session*: ESP RAM, shared by all 4 terminals and all devices, cleared on reboot.
-  - *Save*: NVS, kept for several days and survives reboot and OTA.
-  - Browser `sessionStorage` is per tab, so it is not used: it would give each terminal
-    session its own values.
-- **Hidden values:** the field is masked and has a 👁 toggle. Names containing PASS, PSK,
-  TOKEN, SECRET or KEY are hidden by default; this can be changed. NVS is not encrypted,
-  which is the same level as today's Wi-Fi/AP passwords. A value is still echoed by the
-  shell once the command runs.
-- **Placeholders page:** a 4th tab in `/macros` and *Placeholders…* in the terminal menu.
-  - Columns: name, used in N macros, value (masked when hidden), scope, hidden flag.
-  - Actions: set a value in advance, clear one, *Clear session*, *Clear saved*.
-- **Storage:** NVS namespace `ph`, one JSON blob (NVS keys are max 15 characters).
-  Limits: 32 saved values, value max 64 characters. API `/api/ph` (GET/POST/DELETE).
+  - Shift+click (or long-press) runs the macro immediately when every placeholder already
+    has a non-empty value.
+- **Hidden / sensitive values:** `*` fields are always masked with a 👁 toggle. `.` and `:`
+  fields whose NAME contains PASS, PSK, TOKEN, SECRET or KEY are masked by default; this
+  can be overridden per placeholder. FFat is not encrypted — the same level as today's
+  macro and Wi-Fi password storage. A value is still echoed by the shell once the command
+  runs.
+- **Macro names:** `[TEMPLATE]` suffixes are removed from macro names. Instead, any macro
+  whose `cmd` contains a placeholder shows a small indicator badge in the macro list —
+  visible at a glance without cluttering the name.
+- **Placeholders page:** a 4th tab in `/macros` and *Placeholders...* in the terminal menu.
+  - Columns: name, type (`.` / `:` / `*`), used in N macros, value / list, hidden flag.
+  - Actions: set a value or add to a list in advance, clear one entry, *Clear all*.
+- **Storage:** `/config/placeholders.json` on FFat. Limits: list max 25 items, value max 64
+  characters. API `/api/ph` (GET/POST/DELETE).
 
 ### 2. File menu — save session — medium
 **Partly done:** *Save session…* saves the output as txt, and scrollback is already 10 000
