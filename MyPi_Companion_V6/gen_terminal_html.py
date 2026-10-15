@@ -464,6 +464,7 @@ function getMacroById(id) { return macroPool.macros.find(m => m.id === id); }
 
 function runMacro(id) {
   const m = getMacroById(id);
+  focusTerm();   // quick buttons / menu items keep focus otherwise
   if (!m || !ws || ws.readyState !== 1) return;
   const payload = m.cmd + (m.cr ? '\n' : '');
   try { ws.send(btoa(payload)); }
@@ -727,12 +728,30 @@ function toggleMenu(btn) {
   }
 }
 
-function closeAllMenus() {
-  document.querySelectorAll('.dropdown.show').forEach(d => d.classList.remove('show'));
-  document.querySelectorAll('.mnu-btn.open').forEach(b => b.classList.remove('open'));
+// Give keyboard focus back to the terminal, unless a modal or a menu is open
+// (deferred so a modal opened right after closeAllMenus() is already visible).
+function focusTerm() {
+  setTimeout(() => {
+    if (document.getElementById('modal-bg').classList.contains('show')) return;
+    if (document.querySelector('.dropdown.show')) return;
+    term.focus();
+  }, 0);
 }
 
-document.addEventListener('click', e => { if (!e.target.closest('.mnu-wrap')) closeAllMenus(); });
+function closeAllMenus(refocus = true) {
+  const wasOpen = !!document.querySelector('.dropdown.show');
+  document.querySelectorAll('.dropdown.show').forEach(d => d.classList.remove('show'));
+  document.querySelectorAll('.mnu-btn.open').forEach(b => b.classList.remove('open'));
+  if (wasOpen && refocus) focusTerm();
+}
+
+// Click on a menu item: close the menu (items with their own handler call
+// closeAllMenus() too; this also covers inline window.open() items).
+document.addEventListener('click', e => {
+  if (e.target.closest('.dropdown .dd-item:not(.has-sub)')) { closeAllMenus(); return; }
+  if (!e.target.closest('.mnu-wrap'))
+    closeAllMenus(!e.target.closest('input,textarea,select,#modal-bg'));
+});
 
 // ================================================================
 //  Editor modal
@@ -743,7 +762,7 @@ function openEditor() {
   renderMacroList(); renderMenuTree(); renderQbAssignGrid();
 }
 
-function closeEditor() { document.getElementById('modal-bg').classList.remove('show'); }
+function closeEditor() { document.getElementById('modal-bg').classList.remove('show'); focusTerm(); }
 
 function showTab(name, btn) {
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));

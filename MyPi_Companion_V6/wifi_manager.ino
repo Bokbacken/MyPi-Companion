@@ -173,6 +173,7 @@ bool wifiConnectSlot(int slot) {
   WiFi.mode(apRunning ? WIFI_AP_STA : WIFI_STA);
   WiFi.setSleep(false);
   esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20);
+  if (apRunning) apApplyProtocol();   // keep AP g/n across the mode change
   WiFi.begin(nvsProfiles[slot].ssid, nvsProfiles[slot].pass);
 
   espConnecting = true;

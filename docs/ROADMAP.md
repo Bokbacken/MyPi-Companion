@@ -62,7 +62,11 @@ macro pool on FFat · base64-correct macros · `termFit()` · FFat file manageme
 RPC channel + daemon versioning · web login / PIN · robustness (connection limit, OTA
 rollback) · Pi system panel · Pi file manager · recipes + placeholders · web UI cleanup.
 
-### Planned: AP without 802.11b (next firmware batch)
+### AP without 802.11b — implemented, hardware test pending (branch `feat/v6.4-ap-no11b-term-focus`)
+Implemented as `apApplyProtocol()` (called after `WiFi.softAP()` and after a STA connect
+while the AP runs); `/api/apstatus` reports `apProto`, shown on the AP diagnostics
+`Radio` line. The serial log prints the result of both calls. Same branch: the terminal
+returns keyboard focus to xterm after a menu item, quick button or the macro editor.
 Always better: 802.11b rates (1–11 Mbit/s DSSS) take a lot of airtime per frame.
 Beacons and management frames are also sent at 1 Mbit/s while 11b is on. No current
 client needs 11b (S25, Tab S10, Pi 5, laptops).

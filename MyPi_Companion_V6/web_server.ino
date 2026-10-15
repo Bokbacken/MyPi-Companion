@@ -1247,6 +1247,7 @@ void startAP(int profileSlot) {
   // 20 MHz AP: more robust on crowded 2.4 GHz (hotels, offices) and
   // avoids HT40 secondary-channel conflicts with the STA uplink.
   WiFi.softAPbandwidth(WIFI_BW_HT20);
+  apApplyProtocol();
 
   Serial.printf("[AP] profile %d '%s' ip=%s ch=%d nat=%d sta=%s uplink=%d dns=%s\n",
                 profileSlot + 1, prof.ssid, WiFi.softAPIP().toString().c_str(),
@@ -1261,6 +1262,30 @@ void startAP(int profileSlot) {
   startWebServer();
   Serial.println("CMD:START_AP");
   apRunning = true;
+}
+
+// AP interface without 802.11b: 11b DSSS rates (1-11 Mbit/s) cost a lot of
+// airtime per frame, and no current client needs them. Only the AP is
+// restricted; the STA uplink stays b/g/n so it can join any network.
+// esp_wifi_config_11b_rate() is documented as "before esp_wifi_start()";
+// we call it anyway and log the result (hardware test shows if it sticks).
+// Safe to call repeatedly (e.g. after a mode change while the AP runs).
+void apApplyProtocol() {
+  esp_err_t ep = esp_wifi_set_protocol(WIFI_IF_AP, WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N);
+  esp_err_t er = esp_wifi_config_11b_rate(WIFI_IF_AP, true);
+  uint8_t bm = 0;
+  esp_wifi_get_protocol(WIFI_IF_AP, &bm);
+  Serial.printf("[AP] protocol g/n: set=%s 11b_rate_off=%s now=%s\n",
+                esp_err_to_name(ep), esp_err_to_name(er), apProtocolStr(bm).c_str());
+}
+
+// "b/g/n", "g/n", ... from a WIFI_PROTOCOL_* bitmap
+String apProtocolStr(uint8_t bm) {
+  String s;
+  if (bm & WIFI_PROTOCOL_11B) s += "b";
+  if (bm & WIFI_PROTOCOL_11G) s += s.length() ? "/g" : "g";
+  if (bm & WIFI_PROTOCOL_11N) s += s.length() ? "/n" : "n";
+  return s.length() ? s : String("?");
 }
 
 void stopAP() {
@@ -1355,6 +1380,9 @@ void handleApiApStatus() {
   esp_wifi_get_bandwidth(WIFI_IF_STA, &staBw);
   j += ",\"channel\":"    + String(prim);
   j += ",\"apBw\":"       + String(apBw  == WIFI_BW_HT40 ? 40 : 20);
+  uint8_t apProto = 0;
+  esp_wifi_get_protocol(WIFI_IF_AP, &apProto);
+  j += ",\"apProto\":\""  + apProtocolStr(apProto) + "\"";
   j += ",\"staBw\":"      + String(staBw == WIFI_BW_HT40 ? 40 : 20);
   j += ",\"powerSave\":"  + String(ps == WIFI_PS_NONE ? "false" : "true");
   j += ",\"txPowerDbm\":" + String((int)WiFi.getTxPower() / 4.0f, 1);
