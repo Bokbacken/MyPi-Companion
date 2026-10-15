@@ -62,7 +62,16 @@ macro pool on FFat · base64-correct macros · `termFit()` · FFat file manageme
 RPC channel + daemon versioning · web login / PIN · robustness (connection limit, OTA
 rollback) · Pi system panel · Pi file manager · recipes + placeholders · web UI cleanup.
 
-### Planned: AP without 802.11b (next firmware batch)
+### AP without 802.11b — tried and reverted (2026-10-15), revisit on P4 + C5
+Two attempts on the S3 (core 3.3.12 / IDF 5.x) both left the AP at b/g/n in Wi-Fi Scanner:
+1. `esp_wifi_set_protocol(WIFI_IF_AP, 11G|11N)` + `esp_wifi_config_11b_rate(WIFI_IF_AP, true)`
+   after `WiFi.softAP()` — no effect.
+2. `wifiLockGN()`: stop the radio, set g/n + 11b off + HT20 on both STA and AP, restart —
+   still b/g/n, and Wi-Fi became noticeably unstable.
+Both reverted; S3 Wi-Fi code is unchanged from v6.3.3. Revisit with the ESP32-C5 Wi-Fi
+co-processor (newer IDF/driver), possibly via `esp_wifi_set_protocols()` / an `sdkconfig`
+option instead of runtime calls. Original reasoning kept below.
+
 Always better: 802.11b rates (1–11 Mbit/s DSSS) take a lot of airtime per frame.
 Beacons and management frames are also sent at 1 Mbit/s while 11b is on. No current
 client needs 11b (S25, Tab S10, Pi 5, laptops).
