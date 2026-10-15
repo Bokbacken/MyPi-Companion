@@ -193,7 +193,7 @@ async function loadStatus(test){
       ['Uplink (STA)',d.staConnected?'<span class="ok">'+esc(d.staSsid)+'</span> '+d.staIp+' ('+d.staRssi+' dBm)':'<span class="bad">not connected</span>'],
       ['Uplink gateway',d.staGw],
       ['Uplink DNS',d.staDns],
-      ['Radio','ch '+d.channel+' \u00b7 AP '+(d.apProto?d.apProto+' ':'')+d.apBw+' MHz \u00b7 STA '+d.staBw+' MHz \u00b7 TX '+d.txPowerDbm+' dBm \u00b7 <span class="'+cls(!d.powerSave)+'">power save '+(d.powerSave?'ON':'off')+'</span>'],
+      ['Radio','ch '+d.channel+' \u00b7 AP '+(d.apProto?d.apProto+' ':'')+d.apBw+' MHz \u00b7 STA '+(d.staProto?d.staProto+' ':'')+d.staBw+' MHz \u00b7 TX '+d.txPowerDbm+' dBm \u00b7 <span class="'+cls(!d.powerSave)+'">power save '+(d.powerSave?'ON':'off')+'</span>'],
       ['Uplink drops',d.staDrops?'<span class="bad">'+d.staDrops+'</span> \u2014 last '+esc(d.staLastReason)+', '+d.staLastDropAgoS+' s ago':'<span class="ok">0</span>'],
       ['ESP load','loop max '+d.loopMaxMs+' ms \u00b7 heap '+d.heapFreeKb+' kB (min '+d.heapMinKb+' kB) \u00b7 up '+Math.floor(d.uptimeS/60)+' min'],
     ];

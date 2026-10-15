@@ -63,9 +63,13 @@ RPC channel + daemon versioning · web login / PIN · robustness (connection lim
 rollback) · Pi system panel · Pi file manager · recipes + placeholders · web UI cleanup.
 
 ### AP without 802.11b — implemented, hardware test pending (branch `feat/v6.4-ap-no11b-term-focus`)
-Implemented as `apApplyProtocol()` (called after `WiFi.softAP()` and after a STA connect
-while the AP runs); `/api/apstatus` reports `apProto`, shown on the AP diagnostics
-`Radio` line. The serial log prints the result of both calls. Same branch: the terminal
+First attempt (protocol set after `WiFi.softAP()`) had no effect: AP stayed b/g/n.
+Now `wifiLockGN()` locks **both STA and AP** to g/n with 11b rates off (Kent: assume
+everything is newer than 11b). Like HT20 it must be set while the radio is stopped, so it
+stops the radio, enables both interfaces, sets protocol + 11b off + HT20, restores the mode
+and restarts — at boot and after any `WIFI_OFF` re-init; otherwise a no-op.
+`/api/apstatus` reports `apProto` / `staProto`, shown on the AP diagnostics `Radio` line;
+the serial log prints `[WIFI] lock g/n ...` with every result code. Same branch: the terminal
 returns keyboard focus to xterm after a menu item, quick button or the macro editor.
 Always better: 802.11b rates (1–11 Mbit/s DSSS) take a lot of airtime per frame.
 Beacons and management frames are also sent at 1 Mbit/s while 11b is on. No current

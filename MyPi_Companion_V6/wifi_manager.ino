@@ -59,6 +59,56 @@ void wifiDiagInit() {
 }
 
 // -----------------------------------------------------------
+//  wifiLockGN()
+//  Lock BOTH interfaces (STA and AP) to 802.11 g/n, no 11b rates.
+//  Like HT20, this only takes effect when set while the radio is
+//  stopped: esp_wifi_config_11b_rate() must be called before
+//  esp_wifi_start(), and a running AP keeps its b/g/n beacons.
+//  So: stop the radio, temporarily enable both interfaces (so the AP
+//  can be configured even in STA-only mode), set protocol + 11b off,
+//  restore the mode, start again. The config lives in the driver
+//  until WiFi is deinitialised (WiFi.mode(WIFI_OFF)).
+//  Call right after every WiFi.mode() that turns an interface on.
+//  Cheap no-op when the enabled interfaces are already g/n, so a
+//  restart (which drops STA/AP links) normally happens only at boot
+//  or after WIFI_OFF, before anything is connected.
+// -----------------------------------------------------------
+static const uint8_t WIFI_GN = WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N;
+
+static bool _ifIsGN(wifi_interface_t ifx) {
+  uint8_t bm = 0;
+  return esp_wifi_get_protocol(ifx, &bm) == ESP_OK && bm == WIFI_GN;
+}
+
+void wifiLockGN() {
+  wifi_mode_t m = WIFI_MODE_NULL;
+  if (esp_wifi_get_mode(&m) != ESP_OK || m == WIFI_MODE_NULL) return;
+  bool staOk = !(m & WIFI_MODE_STA) || _ifIsGN(WIFI_IF_STA);
+  bool apOk  = !(m & WIFI_MODE_AP)  || _ifIsGN(WIFI_IF_AP);
+  if (staOk && apOk) return;
+
+  esp_err_t eStop = esp_wifi_stop();
+  esp_wifi_set_mode(WIFI_MODE_APSTA);
+  esp_err_t pSta = esp_wifi_set_protocol(WIFI_IF_STA, WIFI_GN);
+  esp_err_t pAp  = esp_wifi_set_protocol(WIFI_IF_AP,  WIFI_GN);
+  esp_err_t rSta = esp_wifi_config_11b_rate(WIFI_IF_STA, true);
+  esp_err_t rAp  = esp_wifi_config_11b_rate(WIFI_IF_AP,  true);
+  esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20);
+  esp_wifi_set_bandwidth(WIFI_IF_AP,  WIFI_BW_HT20);
+  esp_wifi_set_mode(m);
+  esp_err_t eStart = esp_wifi_start();
+  WiFi.setSleep(false);
+
+  uint8_t bs = 0, ba = 0;
+  esp_wifi_get_protocol(WIFI_IF_STA, &bs);
+  esp_wifi_get_protocol(WIFI_IF_AP,  &ba);
+  Serial.printf("[WIFI] lock g/n (mode %d): stop=%s proto sta=%s ap=%s 11b_off sta=%s ap=%s start=%s -> STA %s, AP %s\n",
+                (int)m, esp_err_to_name(eStop), esp_err_to_name(pSta), esp_err_to_name(pAp),
+                esp_err_to_name(rSta), esp_err_to_name(rAp), esp_err_to_name(eStart),
+                apProtocolStr(bs).c_str(), apProtocolStr(ba).c_str());
+}
+
+// -----------------------------------------------------------
 //  Internal helpers
 // -----------------------------------------------------------
 
@@ -110,6 +160,7 @@ void wifiAutoConnect() {
   // In AP_STA mode both interfaces share one radio; if STA negotiates
   // HT40 the whole radio runs at 40 MHz even when AP is set to HT20.
   esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20);
+  wifiLockGN();
 
   // Count valid slots — nothing to do if pool is empty
   int validCount = 0;
@@ -173,7 +224,7 @@ bool wifiConnectSlot(int slot) {
   WiFi.mode(apRunning ? WIFI_AP_STA : WIFI_STA);
   WiFi.setSleep(false);
   esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20);
-  if (apRunning) apApplyProtocol();   // keep AP g/n across the mode change
+  wifiLockGN();   // no-op unless the STA interface was just (re)initialised
   WiFi.begin(nvsProfiles[slot].ssid, nvsProfiles[slot].pass);
 
   espConnecting = true;
