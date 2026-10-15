@@ -45,7 +45,7 @@ macro pool on FFat · base64-correct macros · `termFit()` · FFat file manageme
 - 4 editable AP profiles (name, SSID, password, subnet preset, NAT) — touch picker + `/ap-profiles`
 - NAT internet sharing via ESP32 NAPT (~6 Mbit/s), forced client DNS 1.1.1.1, `/api/apstatus`
 
-### v6.3 Pi system info + ESP web connect — hardware-tested (AP-aware STA soak test pending)
+### v6.3 Pi system info + ESP web connect — hardware-tested (AP-aware STA soak test passed: ~10 h, 2026-10-15)
 - Daemon sends `STATUS:SYS:key=value|…` (hostname, model, OS, kernel, daemon version, uptime,
   load, CPU temp, RAM, disk, throttle flags, Wi-Fi dBm, NTP). Key/value format: new fields
   can be added without a protocol change; unknown keys are shown raw on `/info`
