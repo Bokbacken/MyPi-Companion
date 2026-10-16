@@ -1,0 +1,113 @@
+<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;700&display=block">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{width:540px;height:992px;background:transparent;overflow:hidden;font-family:'IBM Plex Mono','Courier New',monospace;-webkit-font-smoothing:none;}
+.bezel{position:absolute;left:0;top:0;width:540px;height:992px;background:#111111;border-radius:12px;box-shadow:inset 0 0 0 1px #262626}
+.lcd{position:absolute;left:12px;top:16px;width:516px;height:960px;background:#000;overflow:hidden;box-shadow:0 0 0 1px #050505}
+.z{position:absolute;left:0;width:516px}
+.t{position:absolute;white-space:pre;font-size:24px;line-height:24px;letter-spacing:3.6px;font-weight:500}
+.t2{position:absolute;white-space:pre;font-size:48px;line-height:48px;letter-spacing:7.2px;font-weight:500}
+.hl{position:absolute;left:12px;width:492px;height:3px;background:#202020}
+.btn{position:absolute;top:6px;height:48px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:24px;letter-spacing:3.6px;font-weight:700}
+</style></head><body>
+<div class="bezel"></div>
+<div class="lcd">
+
+<!-- HEADER: white bg, navy title, AP-icon + NAT "+", M logo, orange underline -->
+<div class="z" style="top:0;height:60px;background:#FFFFFF">
+  <div class="t" style="left:12px;top:17px;color:#183060;font-weight:700">AP active</div>
+  <!-- M logo placeholder -->
+  <img src="logo_icon_3x.png" style="position:absolute;right:30px;top:3px;width:69px;height:54px;image-rendering:pixelated" alt="logo">
+  <!-- AP WiFi icon (dot + 2 arcs) + NAT "+" -->
+  <svg style="position:absolute;left:324px;top:0" width="84" height="60" viewBox="0 0 84 60"><circle cx="30" cy="42" r="6" fill="#F07C20"/><path d="M15.7 33.8 A16.5 16.5 0 0 1 44.3 33.7" fill="none" stroke="#F07C20" stroke-width="3"/><path d="M5.3 27.7 A28.5 28.5 0 0 1 54.7 27.7" fill="none" stroke="#F07C20" stroke-width="3"/><rect x="63" y="27" width="15" height="3" fill="#F07C20"/><rect x="69" y="21" width="3" height="15" fill="#F07C20"/></svg>
+  <!-- Orange underline -->
+  <div style="position:absolute;left:0;bottom:0;width:516px;height:3px;background:#F07C20"></div>
+</div>
+
+<!-- CONTENT: drawApActiveContent() faithfully reproduced -->
+<div class="z" style="top:60px;height:648px;background:#000000">
+
+  <!-- "AP ACTIVE" — textSize=2 (48px HTML), COL_ACTIVE=green -->
+  <!-- TFT y=CONTENT_TOP+4=24 → HTML top=12px in this div -->
+  <div class="t2" style="left:12px;top:12px;color:#00FF00">AP ACTIVE</div>
+
+  <!-- HLine: TFT y += 22 → 24+22=46 → HTML top=78px in div (46*3-60=78) -->
+  <div class="hl" style="top:78px"></div>
+
+  <!-- Info section starts: TFT y=46+6=52 → HTML top=96px (52*3-60=96) -->
+  <!-- R=14 TFT → 42px HTML between rows -->
+
+  <!-- SSID: dim label | white value -->
+  <div class="t" style="left:12px;top:96px;color:#787878">SSID:</div>
+  <div class="t" style="left:132px;top:96px;color:#FFFFFF">RigSetup</div>
+
+  <!-- Pass: (top=96+42=138) -->
+  <div class="t" style="left:12px;top:138px;color:#787878">Pass:</div>
+  <div class="t" style="left:132px;top:138px;color:#FFFFFF">MyPi1234</div>
+
+  <!-- Web: orange IP (top=180) -->
+  <div class="t" style="left:12px;top:180px;color:#787878">Web:</div>
+  <div class="t" style="left:132px;top:180px;color:#F07C20">192.168.4.1</div>
+
+  <!-- NAT: green "active" (top=222) — apNatActive()==true -->
+  <div class="t" style="left:12px;top:222px;color:#787878">NAT:</div>
+  <div class="t" style="left:132px;top:222px;color:#00FF00">active</div>
+
+  <!-- OTA: dim (top=264) -->
+  <div class="t" style="left:12px;top:264px;color:#787878">OTA:</div>
+  <div class="t" style="left:132px;top:264px;color:#787878">/update</div>
+
+  <!-- HLine after info: TFT y=122 → HTML top=306px (122*3-60=306) -->
+  <div class="hl" style="top:306px"></div>
+
+  <!-- Client section: TFT y=122+6=128 → HTML top=324px (128*3-60=324) -->
+  <div class="t" style="left:12px;top:324px;color:#787878">Clients (3/8):</div>
+
+  <!-- Client 1: TFT y=142 → HTML top=366 (142*3-60=366) -->
+  <!-- Format: "%-4s %.22s" → ".42 " + " " + hostname -->
+  <div class="t" style="left:12px;top:366px;color:#FFFFFF">.42  HMS-Delft-Helm</div>
+
+  <!-- Client 2: TFT y=156 → HTML top=408 -->
+  <div class="t" style="left:12px;top:408px;color:#FFFFFF">.43  Apple Inc</div>
+
+  <!-- Client 3: TFT y=170 → HTML top=450 -->
+  <div class="t" style="left:12px;top:450px;color:#FFFFFF">.44  Samsung Elec</div>
+
+  <!-- HLine after clients: TFT y=184 → HTML top=492 -->
+  <div class="hl" style="top:492px"></div>
+
+  <!-- Footer hint: TFT y=190 → HTML top=510 -->
+  <div class="t" style="left:12px;top:510px;color:#787878">Tap left: Close AP</div>
+
+</div>
+
+<!-- STATUS BAR: NAT active — espIP = ESP STA uplink IP (upstream net), NOT AP IP -->
+<!-- AP IP (192.168.4.1) is already shown in content "Web:" field -->
+<div class="z" style="top:708px;height:192px;background:#0C0C18">
+  <!-- Signal graph line -->
+  <svg style="position:absolute;left:3px;top:4px" width="510" height="15" shape-rendering="crispEdges">
+    <polyline points="0,2 42,2 42,12 85,12 85,2 128,2 128,12 170,12 170,2 212,2 212,12 255,12 255,2 298,2 298,12 340,12 340,2 382,2 382,12 425,12 425,2 468,2 468,12 510,12"
+      fill="none" stroke="#00FF00" stroke-width="3"/>
+  </svg>
+  <!-- ESP STA/uplink IP on upstream network (green) — NOT the AP IP -->
+  <div class="t2" style="left:12px;top:42px;color:#00FF00">192.168.1.42</div>
+  <!-- Upstream SSID that ESP STA is connected to (dim) -->
+  <div class="t" style="left:12px;top:96px;color:#787878">HMS-Delft-Crew</div>
+  <!-- Separator -->
+  <div style="position:absolute;left:12px;top:123px;width:492px;height:3px;background:#787878"></div>
+  <!-- Pi uplink IP (green) -->
+  <div class="t" style="left:12px;top:132px;color:#00FF00">Pi wlan0: 192.168.1.7</div>
+  <!-- Pi network SSID (dim) -->
+  <div class="t" style="left:12px;top:165px;color:#787878">HMS-Delft-Crew</div>
+</div>
+
+<!-- TOUCH BAR: STOP (dark navy) | HIDE (orange) -->
+<div class="z" style="top:900px;height:60px;background:#0C0C18;border-top:3px solid #202020">
+  <div class="btn" style="left:6px;width:249px;background:#001040;color:#FFFFFF">STOP</div>
+  <div class="btn" style="left:261px;width:249px;background:#F07C20;color:#000000">HIDE</div>
+</div>
+
+</div>
+</body></html>
